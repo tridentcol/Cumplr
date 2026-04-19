@@ -53,6 +53,8 @@ dependencies {
 
     // Ktor HTTP engine required by Supabase 3.x
     implementation(libs.ktor.client.okhttp)
+    // OkHttp explicitly — used by SupabaseRestClient for direct auth REST calls (Plan B)
+    implementation(libs.okhttp)
 
     // Serialization for DTOs
     implementation(libs.kotlinx.serialization.json)
