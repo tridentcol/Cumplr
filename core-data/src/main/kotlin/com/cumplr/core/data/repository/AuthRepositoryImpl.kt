@@ -6,6 +6,7 @@ import com.cumplr.core.data.session.SessionManager
 import com.cumplr.core.domain.model.SessionData
 import com.cumplr.core.domain.model.User
 import com.cumplr.core.domain.repository.AuthRepository
+import android.util.Log
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -14,6 +15,8 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val TAG = "CumplrAuth"
+
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val supabase: SupabaseClient,
@@ -21,18 +24,23 @@ class AuthRepositoryImpl @Inject constructor(
 ) : AuthRepository {
 
     override suspend fun signIn(email: String, password: String): Result<User> {
+        Log.d(TAG, "signIn() called — email=$email")
         return try {
+            Log.d(TAG, "Calling supabase.auth.signInWith...")
             supabase.auth.signInWith(Email) {
                 this.email = email
                 this.password = password
             }
+            Log.d(TAG, "Auth OK — fetching profile from public.users")
             val userId = supabase.auth.currentUserOrNull()?.id
                 ?: return Result.failure(Exception("No se pudo obtener el usuario autenticado."))
 
+            Log.d(TAG, "userId=$userId")
             val userDto = supabase.from("users").select {
                 filter { eq("id", userId) }
             }.decodeSingle<UserDto>()
 
+            Log.d(TAG, "Profile fetched — role=${userDto.role} active=${userDto.active}")
             if (!userDto.active) {
                 supabase.auth.signOut()
                 return Result.failure(Exception("Tu cuenta está inactiva. Contacta a tu administrador."))
@@ -47,8 +55,10 @@ class AuthRepositoryImpl @Inject constructor(
                     name = user.name,
                 )
             )
+            Log.d(TAG, "Session saved — navigating as ${user.role}")
             Result.success(user)
         } catch (e: Exception) {
+            Log.e(TAG, "signIn failed: ${e::class.simpleName} — ${e.message}", e)
             Result.failure(Exception(mapAuthError(e)))
         }
     }
