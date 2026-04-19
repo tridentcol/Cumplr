@@ -1,8 +1,6 @@
 package com.cumplr.core.data.remote
 
-import com.cumplr.core.data.BuildConfig
-
 object SupabaseConfig {
-    val url: String = BuildConfig.SUPABASE_URL
-    val anonKey: String = BuildConfig.SUPABASE_ANON_KEY
+    const val url     = "https://hgjuakeatpznlytkaqxl.supabase.co"
+    const val anonKey = "sb_publishable_ZCiEE5mb5Z4uJ4qYyeTNsg_IplZKg6A"
 }
