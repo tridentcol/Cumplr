@@ -2,21 +2,27 @@ package com.cumplr.app.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.cumplr.app.ui.admin.AdminHomeScreen
 import com.cumplr.app.ui.auth.LoginScreen
 import com.cumplr.app.ui.chief.ChiefHomeScreen
 import com.cumplr.app.ui.splash.SplashScreen
+import com.cumplr.app.ui.worker.TaskDetailScreen
+import com.cumplr.app.ui.worker.TaskExecutionScreen
 import com.cumplr.app.ui.worker.WorkerHomeScreen
 import com.cumplr.core.domain.enums.UserRole
 
 sealed class CumplrRoute(val route: String) {
-    object Splash    : CumplrRoute("splash")
-    object Login     : CumplrRoute("login")
-    object WorkerHome: CumplrRoute("worker_home")
-    object ChiefHome : CumplrRoute("chief_home")
-    object AdminHome : CumplrRoute("admin_home")
+    object Splash        : CumplrRoute("splash")
+    object Login         : CumplrRoute("login")
+    object WorkerHome    : CumplrRoute("worker_home")
+    object ChiefHome     : CumplrRoute("chief_home")
+    object AdminHome     : CumplrRoute("admin_home")
+    object TaskDetail    : CumplrRoute("task_detail/{taskId}")
+    object TaskExecution : CumplrRoute("task_execution/{taskId}")
 }
 
 private fun UserRole.homeRoute() = when (this) {
@@ -61,6 +67,35 @@ fun CumplrNavGraph(navController: NavHostController) {
                 onLogout = {
                     navController.navigate(CumplrRoute.Login.route) {
                         popUpTo(0) { inclusive = true }
+                    }
+                },
+                onTaskClick = { taskId ->
+                    navController.navigate("task_detail/$taskId")
+                },
+            )
+        }
+
+        composable(
+            route = CumplrRoute.TaskDetail.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) {
+            TaskDetailScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToExecution = { taskId ->
+                    navController.navigate("task_execution/$taskId")
+                },
+            )
+        }
+
+        composable(
+            route = CumplrRoute.TaskExecution.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) {
+            TaskExecutionScreen(
+                onBack = { navController.popBackStack() },
+                onSuccess = {
+                    navController.navigate(CumplrRoute.WorkerHome.route) {
+                        popUpTo(CumplrRoute.WorkerHome.route) { inclusive = true }
                     }
                 },
             )

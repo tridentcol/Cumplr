@@ -1,6 +1,7 @@
 package com.cumplr.core.data.remote
 
 import android.util.Log
+import com.cumplr.core.data.remote.dto.TaskDto
 import com.cumplr.core.data.remote.dto.UserDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -15,9 +16,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SupabaseRest"
-private val JSON_MT = "application/json; charset=utf-8".toMediaType()
-
-// ─── internal request / response DTOs ────────────────────────────────────────
+private val JSON_MT  = "application/json; charset=utf-8".toMediaType()
+private val IMAGE_MT = "image/jpeg".toMediaType()
 
 @Serializable
 private data class SignInBody(val email: String, val password: String)
@@ -25,9 +25,9 @@ private data class SignInBody(val email: String, val password: String)
 @Serializable
 private data class AuthTokenResponse(
     @SerialName("access_token")  val accessToken: String,
-    @SerialName("refresh_token") val refreshToken: String  = "",
-    @SerialName("token_type")    val tokenType: String     = "bearer",
-    @SerialName("expires_in")    val expiresIn: Int        = 3600,
+    @SerialName("refresh_token") val refreshToken: String = "",
+    @SerialName("token_type")    val tokenType: String    = "bearer",
+    @SerialName("expires_in")    val expiresIn: Int       = 3600,
     val user: AuthUserPayload,
 )
 
@@ -37,33 +37,19 @@ private data class AuthUserPayload(
     val email: String? = null,
 )
 
-// ─── client ──────────────────────────────────────────────────────────────────
-
-/**
- * Thin OkHttp wrapper that calls Supabase REST APIs directly,
- * bypassing supabase-kt for the auth step (Plan B).
- *
- * Endpoints used:
- *   POST /auth/v1/token?grant_type=password  → obtain JWT
- *   GET  /rest/v1/users?id=eq.<id>&select=*  → fetch user row
- */
 @Singleton
 class SupabaseRestClient @Inject constructor() {
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
 
-    /**
-     * Signs in via email/password and returns (accessToken, userId).
-     * Throws on HTTP error or JSON parse failure.
-     */
     fun signIn(email: String, password: String): Pair<String, String> {
         val bodyStr = json.encodeToString(SignInBody(email, password))
         val request = Request.Builder()
@@ -79,21 +65,15 @@ class SupabaseRestClient @Inject constructor() {
         val body = response.body?.string() ?: ""
         Log.d(TAG, "◀ code=${response.code}  body=${body.take(300)}")
 
-        if (!response.isSuccessful) {
-            throw Exception("HTTP ${response.code}: $body")
-        }
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
 
         val parsed = json.decodeFromString<AuthTokenResponse>(body)
         Log.d(TAG, "signIn OK — userId=${parsed.user.id}")
         return parsed.accessToken to parsed.user.id
     }
 
-    // ── Data ──────────────────────────────────────────────────────────────────
+    // ── Users ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Fetches the public.users row for [userId] using [accessToken] as Bearer.
-     * Returns null if the row is not found (RLS blocking or table empty).
-     */
     fun getUserById(accessToken: String, userId: String): UserDto? {
         val request = Request.Builder()
             .url("${SupabaseConfig.url}/rest/v1/users?id=eq.$userId&select=*")
@@ -108,12 +88,69 @@ class SupabaseRestClient @Inject constructor() {
         val body = response.body?.string() ?: ""
         Log.d(TAG, "◀ code=${response.code}  body=${body.take(300)}")
 
-        if (!response.isSuccessful) {
-            throw Exception("HTTP ${response.code}: $body")
-        }
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
 
         val list = json.decodeFromString<List<UserDto>>(body)
-        Log.d(TAG, "getUserById returned ${list.size} row(s)")
         return list.firstOrNull()
+    }
+
+    // ── Tasks ─────────────────────────────────────────────────────────────────
+
+    fun getTasks(accessToken: String, userId: String): List<TaskDto> {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/tasks?assigned_to=eq.$userId&select=*&order=deadline.asc.nullslast")
+            .get()
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Accept", "application/json")
+            .build()
+
+        Log.d(TAG, "▶ GET /rest/v1/tasks?assigned_to=eq.$userId")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}  tasks body=${body.take(200)}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+
+        return json.decodeFromString<List<TaskDto>>(body)
+    }
+
+    fun patchTask(accessToken: String, taskId: String, jsonBody: String) {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/tasks?id=eq.$taskId")
+            .patch(jsonBody.toRequestBody(JSON_MT))
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=minimal")
+            .build()
+
+        Log.d(TAG, "▶ PATCH /rest/v1/tasks?id=eq.$taskId  body=$jsonBody")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+    }
+
+    // ── Storage ───────────────────────────────────────────────────────────────
+
+    fun uploadFile(accessToken: String, bucket: String, path: String, bytes: ByteArray): String {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/storage/v1/object/$bucket/$path")
+            .post(bytes.toRequestBody(IMAGE_MT))
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("x-upsert", "true")
+            .build()
+
+        Log.d(TAG, "▶ POST /storage/v1/object/$bucket/$path  size=${bytes.size}")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+
+        return "${SupabaseConfig.url}/storage/v1/object/public/$bucket/$path"
     }
 }

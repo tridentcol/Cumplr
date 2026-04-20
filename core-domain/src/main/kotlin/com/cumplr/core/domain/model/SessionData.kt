@@ -7,4 +7,5 @@ data class SessionData(
     val companyId: String,
     val role: UserRole,
     val name: String,
+    val accessToken: String = "",
 )

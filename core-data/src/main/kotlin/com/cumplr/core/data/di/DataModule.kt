@@ -4,7 +4,11 @@ import android.content.Context
 import androidx.room.Room
 import com.cumplr.core.data.local.CumplrDatabase
 import com.cumplr.core.data.repository.AuthRepositoryImpl
+import com.cumplr.core.data.repository.StorageRepositoryImpl
+import com.cumplr.core.data.repository.TaskRepositoryImpl
 import com.cumplr.core.domain.repository.AuthRepository
+import com.cumplr.core.domain.repository.StorageRepository
+import com.cumplr.core.domain.repository.TaskRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -17,27 +21,28 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class DataModule {
 
-    @Binds
-    @Singleton
+    @Binds @Singleton
     abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds @Singleton
+    abstract fun bindTaskRepository(impl: TaskRepositoryImpl): TaskRepository
+
+    @Binds @Singleton
+    abstract fun bindStorageRepository(impl: StorageRepositoryImpl): StorageRepository
 
     companion object {
 
-        @Provides
-        @Singleton
+        @Provides @Singleton
         fun provideDatabase(@ApplicationContext context: Context): CumplrDatabase =
             Room.databaseBuilder(context, CumplrDatabase::class.java, "cumplr.db").build()
 
-        @Provides
-        @Singleton
+        @Provides @Singleton
         fun provideUserDao(db: CumplrDatabase) = db.userDao()
 
-        @Provides
-        @Singleton
+        @Provides @Singleton
         fun provideTaskDao(db: CumplrDatabase) = db.taskDao()
 
-        @Provides
-        @Singleton
+        @Provides @Singleton
         fun provideNotificationDao(db: CumplrDatabase) = db.notificationDao()
     }
 }
