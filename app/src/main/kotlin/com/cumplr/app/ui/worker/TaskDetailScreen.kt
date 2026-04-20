@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cumplr.core.domain.enums.TaskStatus
@@ -103,7 +104,7 @@ private fun TaskDetailContent(task: Task, onStartTask: () -> Unit) {
             if (!task.description.isNullOrBlank()) {
                 Spacer(Modifier.height(Spacing.sm))
                 Text(
-                    text  = task.description,
+                    text  = task.description.orEmpty(),
                     style = MaterialTheme.typography.bodyLarge,
                     color = CumplrFgMuted,
                 )
@@ -114,25 +115,25 @@ private fun TaskDetailContent(task: Task, onStartTask: () -> Unit) {
             DetailRow(label = "Prioridad", value = task.priority.name.lowercase().replaceFirstChar { it.uppercase() })
             if (!task.deadline.isNullOrBlank()) {
                 Spacer(Modifier.height(Spacing.sm))
-                DetailRow(label = "Vence", value = task.deadline.take(10))
+                DetailRow(label = "Vence", value = task.deadline.orEmpty().take(10))
             }
         }
 
         if (!task.observations.isNullOrBlank()) {
             CumplrCard {
-                DetailRow(label = "Observaciones", value = task.observations)
+                DetailRow(label = "Observaciones", value = task.observations.orEmpty())
             }
         }
 
         if (!task.feedback.isNullOrBlank()) {
             CumplrCard {
-                DetailRow(label = "Retroalimentación", value = task.feedback)
+                DetailRow(label = "Retroalimentación", value = task.feedback.orEmpty())
             }
         }
 
         if (!task.rejectionReason.isNullOrBlank()) {
             CumplrCard {
-                DetailRow(label = "Motivo de rechazo", value = task.rejectionReason)
+                DetailRow(label = "Motivo de rechazo", value = task.rejectionReason.orEmpty())
             }
         }
 
