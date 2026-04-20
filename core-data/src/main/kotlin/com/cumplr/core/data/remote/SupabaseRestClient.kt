@@ -115,6 +115,42 @@ class SupabaseRestClient @Inject constructor() {
         return json.decodeFromString<List<TaskDto>>(body)
     }
 
+    fun getCompanyTasks(accessToken: String, companyId: String): List<TaskDto> {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/tasks?company_id=eq.$companyId&select=*&order=deadline.asc.nullslast")
+            .get()
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Accept", "application/json")
+            .build()
+
+        Log.d(TAG, "▶ GET /rest/v1/tasks?company_id=eq.$companyId")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}  tasks=${body.take(100)}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+        return json.decodeFromString<List<TaskDto>>(body)
+    }
+
+    fun getCompanyUsers(accessToken: String, companyId: String): List<UserDto> {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/users?company_id=eq.$companyId&select=*")
+            .get()
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Accept", "application/json")
+            .build()
+
+        Log.d(TAG, "▶ GET /rest/v1/users?company_id=eq.$companyId")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+        return json.decodeFromString<List<UserDto>>(body)
+    }
+
     fun patchTask(accessToken: String, taskId: String, jsonBody: String) {
         val request = Request.Builder()
             .url("${SupabaseConfig.url}/rest/v1/tasks?id=eq.$taskId")

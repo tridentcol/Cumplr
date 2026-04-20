@@ -9,6 +9,8 @@ import androidx.navigation.navArgument
 import com.cumplr.app.ui.admin.AdminHomeScreen
 import com.cumplr.app.ui.auth.LoginScreen
 import com.cumplr.app.ui.chief.ChiefHomeScreen
+import com.cumplr.app.ui.chief.TaskReviewScreen
+import com.cumplr.app.ui.chief.TeamScreen
 import com.cumplr.app.ui.splash.SplashScreen
 import com.cumplr.app.ui.worker.TaskDetailScreen
 import com.cumplr.app.ui.worker.TaskExecutionScreen
@@ -23,6 +25,8 @@ sealed class CumplrRoute(val route: String) {
     object AdminHome     : CumplrRoute("admin_home")
     object TaskDetail    : CumplrRoute("task_detail/{taskId}")
     object TaskExecution : CumplrRoute("task_execution/{taskId}")
+    object TaskReview    : CumplrRoute("task_review/{taskId}")
+    object ChiefTeam     : CumplrRoute("chief_team")
 }
 
 private fun UserRole.homeRoute() = when (this) {
@@ -107,7 +111,27 @@ fun CumplrNavGraph(navController: NavHostController) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                onTaskReview = { taskId -> navController.navigate("task_review/$taskId") },
+                onTeamClick  = { navController.navigate(CumplrRoute.ChiefTeam.route) },
             )
+        }
+
+        composable(
+            route     = CumplrRoute.TaskReview.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) {
+            TaskReviewScreen(
+                onBack    = { navController.popBackStack() },
+                onSuccess = {
+                    navController.navigate(CumplrRoute.ChiefHome.route) {
+                        popUpTo(CumplrRoute.ChiefHome.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(CumplrRoute.ChiefTeam.route) {
+            TeamScreen(onBack = { navController.popBackStack() })
         }
         composable(CumplrRoute.AdminHome.route) {
             AdminHomeScreen(

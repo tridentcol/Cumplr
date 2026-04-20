@@ -17,4 +17,7 @@ interface UserDao {
 
     @Query("SELECT * FROM users WHERE company_id = :companyId")
     fun getUsersByCompany(companyId: String): Flow<List<UserEntity>>
+
+    @Query("SELECT COUNT(*) FROM users WHERE company_id = :companyId AND active = 1")
+    fun getActiveWorkersCount(companyId: String): Flow<Int>
 }

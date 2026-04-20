@@ -6,9 +6,11 @@ import com.cumplr.core.data.local.CumplrDatabase
 import com.cumplr.core.data.repository.AuthRepositoryImpl
 import com.cumplr.core.data.repository.StorageRepositoryImpl
 import com.cumplr.core.data.repository.TaskRepositoryImpl
+import com.cumplr.core.data.repository.UserRepositoryImpl
 import com.cumplr.core.domain.repository.AuthRepository
 import com.cumplr.core.domain.repository.StorageRepository
 import com.cumplr.core.domain.repository.TaskRepository
+import com.cumplr.core.domain.repository.UserRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -29,6 +31,9 @@ abstract class DataModule {
 
     @Binds @Singleton
     abstract fun bindStorageRepository(impl: StorageRepositoryImpl): StorageRepository
+
+    @Binds @Singleton
+    abstract fun bindUserRepository(impl: UserRepositoryImpl): UserRepository
 
     companion object {
 

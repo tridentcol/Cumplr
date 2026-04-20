@@ -81,6 +81,10 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // Coil for image loading
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+
     // CameraX
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)

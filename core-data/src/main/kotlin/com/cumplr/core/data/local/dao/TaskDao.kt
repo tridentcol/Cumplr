@@ -73,4 +73,50 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET sync_pending = 1 WHERE id = :taskId")
     suspend fun markSyncPending(taskId: String)
+
+    // ── Chief metrics ─────────────────────────────────────────────────────────
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE company_id = :companyId AND status IN ('ASSIGNED', 'IN_PROGRESS')")
+    fun getActiveTasksCount(companyId: String): Flow<Int>
+
+    @Query("""
+        SELECT CASE WHEN COUNT(*) = 0 THEN 0.0
+        ELSE CAST(SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+        END FROM tasks WHERE company_id = :companyId
+    """)
+    fun getCompletionRate(companyId: String): Flow<Float>
+
+    @Query("""
+        SELECT COUNT(*) FROM tasks
+        WHERE company_id = :companyId
+        AND status NOT IN ('APPROVED', 'REJECTED')
+        AND deadline IS NOT NULL
+        AND deadline < strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+    """)
+    fun getOverdueCount(companyId: String): Flow<Int>
+
+    @Query("SELECT * FROM tasks WHERE company_id = :companyId AND status IN ('SUBMITTED', 'UNDER_REVIEW') ORDER BY updated_at DESC")
+    fun getTasksForReview(companyId: String): Flow<List<TaskEntity>>
+
+    // ── Chief approval/rejection ───────────────────────────────────────────────
+
+    @Query("""
+        UPDATE tasks
+        SET status = :status,
+            feedback = :feedback,
+            updated_at = :updatedAt,
+            sync_pending = :syncPending
+        WHERE id = :taskId
+    """)
+    suspend fun updateApproval(taskId: String, status: String, feedback: String?, updatedAt: String, syncPending: Int)
+
+    @Query("""
+        UPDATE tasks
+        SET status = :status,
+            rejection_reason = :rejectionReason,
+            updated_at = :updatedAt,
+            sync_pending = :syncPending
+        WHERE id = :taskId
+    """)
+    suspend fun updateRejection(taskId: String, status: String, rejectionReason: String, updatedAt: String, syncPending: Int)
 }

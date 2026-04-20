@@ -6,7 +6,15 @@ import kotlinx.coroutines.flow.Flow
 interface TaskRepository {
     fun getMyTasks(userId: String): Flow<List<Task>>
     fun getTask(taskId: String): Flow<Task?>
+    fun getTasksByCompany(companyId: String): Flow<List<Task>>
+    fun getActiveTasksCount(companyId: String): Flow<Int>
+    fun getCompletionRate(companyId: String): Flow<Float>
+    fun getOverdueCount(companyId: String): Flow<Int>
+    fun getTasksForReview(companyId: String): Flow<List<Task>>
     suspend fun refresh(userId: String): Result<Unit>
+    suspend fun refreshCompanyTasks(companyId: String): Result<Unit>
     suspend fun startTask(taskId: String, photoStartUrl: String): Result<Unit>
     suspend fun submitTask(taskId: String, photoEndUrl: String, observations: String?): Result<Unit>
+    suspend fun approveTask(taskId: String, feedback: String?): Result<Unit>
+    suspend fun rejectTask(taskId: String, rejectionReason: String): Result<Unit>
 }
