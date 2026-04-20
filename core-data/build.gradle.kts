@@ -64,4 +64,9 @@ dependencies {
 
     // DataStore for session persistence
     implementation(libs.datastore.preferences)
+
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 }
