@@ -56,9 +56,25 @@ fun CumplrNavGraph(navController: NavHostController) {
             )
         }
 
-        composable(CumplrRoute.WorkerHome.route) { WorkerHomeScreen() }
-        composable(CumplrRoute.ChiefHome.route)  { ChiefHomeScreen() }
-        composable(CumplrRoute.AdminHome.route)  {
+        composable(CumplrRoute.WorkerHome.route) {
+            WorkerHomeScreen(
+                onLogout = {
+                    navController.navigate(CumplrRoute.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(CumplrRoute.ChiefHome.route) {
+            ChiefHomeScreen(
+                onLogout = {
+                    navController.navigate(CumplrRoute.Login.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(CumplrRoute.AdminHome.route) {
             AdminHomeScreen(
                 onLogout = {
                     navController.navigate(CumplrRoute.Login.route) {

@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Business
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +47,7 @@ fun AdminHomeScreen(
                 actions = {
                     IconButton(onClick = { viewModel.signOut() }) {
                         Icon(
-                            imageVector = Icons.Outlined.Logout,
+                            imageVector = Icons.AutoMirrored.Outlined.ExitToApp,
                             contentDescription = "Cerrar sesión",
                             tint = CumplrFgMuted,
                         )

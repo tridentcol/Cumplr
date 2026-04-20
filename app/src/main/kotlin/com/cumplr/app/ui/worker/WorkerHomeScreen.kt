@@ -1,18 +1,29 @@
 package com.cumplr.app.ui.worker
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
+import com.cumplr.core.ui.component.CumplrAppBar
 import com.cumplr.core.ui.component.TaskCard
+import com.cumplr.core.ui.theme.CumplrFgMuted
 import com.cumplr.core.ui.theme.Spacing
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -61,21 +72,46 @@ private val sampleTasks = listOf(
 )
 
 @Composable
-fun WorkerHomeScreen() {
+fun WorkerHomeScreen(
+    onLogout: () -> Unit,
+    viewModel: WorkerHomeViewModel = hiltViewModel(),
+) {
+    val didLogOut by viewModel.didLogOut.collectAsStateWithLifecycle()
+
+    LaunchedEffect(didLogOut) {
+        if (didLogOut) onLogout()
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
-        LazyColumn(
-            contentPadding = PaddingValues(Spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-        ) {
-            items(sampleTasks) { task ->
-                TaskCard(
-                    task = task,
-                    onClick = {},
-                    assignerName = "Jefe Carlos",
-                )
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            CumplrAppBar(
+                title = "Mis Tareas",
+                actions = {
+                    IconButton(onClick = { viewModel.signOut() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ExitToApp,
+                            contentDescription = "Cerrar sesión",
+                            tint = CumplrFgMuted,
+                        )
+                    }
+                },
+            )
+
+            LazyColumn(
+                contentPadding = PaddingValues(Spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                items(sampleTasks) { task ->
+                    TaskCard(
+                        task = task,
+                        onClick = {},
+                        assignerName = "Jefe Carlos",
+                    )
+                }
             }
         }
     }
