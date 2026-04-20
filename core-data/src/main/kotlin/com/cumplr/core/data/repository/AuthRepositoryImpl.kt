@@ -58,10 +58,11 @@ class AuthRepositoryImpl @Inject constructor(
                 val user = userDto.toDomain()
                 sessionManager.saveSession(
                     SessionData(
-                        userId    = user.id,
-                        companyId = user.companyId,
-                        role      = user.role,
-                        name      = user.name,
+                        userId      = user.id,
+                        companyId   = user.companyId,
+                        role        = user.role,
+                        name        = user.name,
+                        accessToken = accessToken,
                     )
                 )
                 Log.d(TAG, "─── signIn() success — role=${user.role} ───")

@@ -21,28 +21,31 @@ class SessionManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     companion object {
-        private val KEY_USER_ID    = stringPreferencesKey("user_id")
-        private val KEY_COMPANY_ID = stringPreferencesKey("company_id")
-        private val KEY_ROLE       = stringPreferencesKey("role")
-        private val KEY_NAME       = stringPreferencesKey("name")
+        private val KEY_USER_ID      = stringPreferencesKey("user_id")
+        private val KEY_COMPANY_ID   = stringPreferencesKey("company_id")
+        private val KEY_ROLE         = stringPreferencesKey("role")
+        private val KEY_NAME         = stringPreferencesKey("name")
+        private val KEY_ACCESS_TOKEN = stringPreferencesKey("access_token")
     }
 
     suspend fun saveSession(data: SessionData) {
         context.sessionDataStore.edit { prefs ->
-            prefs[KEY_USER_ID]    = data.userId
-            prefs[KEY_COMPANY_ID] = data.companyId
-            prefs[KEY_ROLE]       = data.role.name
-            prefs[KEY_NAME]       = data.name
+            prefs[KEY_USER_ID]      = data.userId
+            prefs[KEY_COMPANY_ID]   = data.companyId
+            prefs[KEY_ROLE]         = data.role.name
+            prefs[KEY_NAME]         = data.name
+            prefs[KEY_ACCESS_TOKEN] = data.accessToken
         }
     }
 
     fun getSession(): Flow<SessionData?> = context.sessionDataStore.data.map { prefs ->
-        val userId    = prefs[KEY_USER_ID]    ?: return@map null
-        val companyId = prefs[KEY_COMPANY_ID] ?: return@map null
-        val roleName  = prefs[KEY_ROLE]       ?: return@map null
-        val name      = prefs[KEY_NAME]       ?: return@map null
-        val role      = runCatching { UserRole.valueOf(roleName) }.getOrNull() ?: return@map null
-        SessionData(userId = userId, companyId = companyId, role = role, name = name)
+        val userId      = prefs[KEY_USER_ID]    ?: return@map null
+        val companyId   = prefs[KEY_COMPANY_ID] ?: return@map null
+        val roleName    = prefs[KEY_ROLE]       ?: return@map null
+        val name        = prefs[KEY_NAME]       ?: return@map null
+        val accessToken = prefs[KEY_ACCESS_TOKEN] ?: ""
+        val role = runCatching { UserRole.valueOf(roleName) }.getOrNull() ?: return@map null
+        SessionData(userId = userId, companyId = companyId, role = role, name = name, accessToken = accessToken)
     }
 
     suspend fun clearSession() {
