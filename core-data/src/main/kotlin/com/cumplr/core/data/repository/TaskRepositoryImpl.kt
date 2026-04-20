@@ -63,7 +63,7 @@ class TaskRepositoryImpl @Inject constructor(
                     photoStartUrl = photoStartUrl,
                     startTime     = now,
                     updatedAt     = now,
-                    syncPending   = false,
+                    syncPending   = 0,
                 )
                 try {
                     val session = sessionManager.getSession().first()
@@ -100,7 +100,7 @@ class TaskRepositoryImpl @Inject constructor(
                 endTime     = now,
                 observations = observations,
                 updatedAt   = now,
-                syncPending = false,
+                syncPending = 0,
             )
             try {
                 val session = sessionManager.getSession().first()

@@ -48,7 +48,7 @@ interface TaskDao {
         photoStartUrl: String,
         startTime: String,
         updatedAt: String,
-        syncPending: Boolean,
+        syncPending: Int,
     )
 
     @Query("""
@@ -68,7 +68,7 @@ interface TaskDao {
         endTime: String,
         observations: String?,
         updatedAt: String,
-        syncPending: Boolean,
+        syncPending: Int,
     )
 
     @Query("UPDATE tasks SET sync_pending = 1 WHERE id = :taskId")
