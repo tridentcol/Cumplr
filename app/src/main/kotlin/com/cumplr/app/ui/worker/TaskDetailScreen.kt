@@ -1,5 +1,6 @@
 package com.cumplr.app.ui.worker
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,8 @@ import com.cumplr.core.ui.component.CumplrChip
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
+import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
+import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.Spacing
 
 @Composable
@@ -132,8 +136,23 @@ private fun TaskDetailContent(task: Task, onStartTask: () -> Unit) {
         }
 
         if (!task.rejectionReason.isNullOrBlank()) {
-            CumplrCard {
-                DetailRow(label = "Motivo de rechazo", value = task.rejectionReason.orEmpty())
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(CumplrStatusOverdueBg, RoundedCornerShape(12.dp))
+                    .padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                Text(
+                    text  = "Motivo del rechazo",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CumplrStatusOverdueFg,
+                )
+                Text(
+                    text  = "\"${task.rejectionReason.orEmpty()}\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CumplrFg,
+                )
             }
         }
 
