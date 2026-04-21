@@ -10,6 +10,7 @@ data class TaskEntity(
     @ColumnInfo(name = "company_id") val companyId: String,
     val title: String,
     val description: String?,
+    val location: String?,
     @ColumnInfo(name = "assigned_to") val assignedTo: String,
     @ColumnInfo(name = "assigned_by") val assignedBy: String,
     val status: String,

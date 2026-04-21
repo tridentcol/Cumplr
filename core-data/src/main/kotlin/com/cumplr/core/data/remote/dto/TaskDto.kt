@@ -9,6 +9,7 @@ data class TaskDto(
     @SerialName("company_id") val companyId: String,
     val title: String,
     val description: String? = null,
+    val location: String? = null,
     @SerialName("assigned_to") val assignedTo: String,
     @SerialName("assigned_by") val assignedBy: String,
     val status: String,

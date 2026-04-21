@@ -3,6 +3,7 @@ package com.cumplr.core.data.di
 import android.content.Context
 import androidx.room.Room
 import com.cumplr.core.data.local.CumplrDatabase
+import com.cumplr.core.data.local.MIGRATION_1_2
 import com.cumplr.core.data.repository.AuthRepositoryImpl
 import com.cumplr.core.data.repository.StorageRepositoryImpl
 import com.cumplr.core.data.repository.TaskRepositoryImpl
@@ -39,7 +40,9 @@ abstract class DataModule {
 
         @Provides @Singleton
         fun provideDatabase(@ApplicationContext context: Context): CumplrDatabase =
-            Room.databaseBuilder(context, CumplrDatabase::class.java, "cumplr.db").build()
+            Room.databaseBuilder(context, CumplrDatabase::class.java, "cumplr.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
 
         @Provides @Singleton
         fun provideUserDao(db: CumplrDatabase) = db.userDao()

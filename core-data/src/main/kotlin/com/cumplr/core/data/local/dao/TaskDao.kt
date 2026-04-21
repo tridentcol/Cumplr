@@ -74,6 +74,40 @@ interface TaskDao {
     @Query("UPDATE tasks SET sync_pending = 1 WHERE id = :taskId")
     suspend fun markSyncPending(taskId: String)
 
+    @Query("""
+        UPDATE tasks
+        SET status = :status,
+            start_time = :startTime,
+            updated_at = :updatedAt,
+            sync_pending = :syncPending
+        WHERE id = :taskId
+    """)
+    suspend fun markTaskStarted(taskId: String, status: String, startTime: String, updatedAt: String, syncPending: Int)
+
+    @Query("""
+        UPDATE tasks
+        SET title = :title,
+            description = :description,
+            location = :location,
+            deadline = :deadline,
+            assigned_to = :assignedTo,
+            priority = :priority,
+            updated_at = :updatedAt,
+            sync_pending = :syncPending
+        WHERE id = :taskId
+    """)
+    suspend fun updateTask(
+        taskId: String,
+        title: String,
+        description: String?,
+        location: String?,
+        deadline: String?,
+        assignedTo: String,
+        priority: String,
+        updatedAt: String,
+        syncPending: Int,
+    )
+
     // ── Chief metrics ─────────────────────────────────────────────────────────
 
     @Query("SELECT COUNT(*) FROM tasks WHERE company_id = :companyId AND status IN ('ASSIGNED', 'IN_PROGRESS')")

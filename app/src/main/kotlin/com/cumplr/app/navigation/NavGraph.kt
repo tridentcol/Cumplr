@@ -10,6 +10,7 @@ import com.cumplr.app.ui.admin.AdminHomeScreen
 import com.cumplr.app.ui.auth.LoginScreen
 import com.cumplr.app.ui.chief.ChiefHomeScreen
 import com.cumplr.app.ui.chief.TaskCreateScreen
+import com.cumplr.app.ui.chief.TaskEditScreen
 import com.cumplr.app.ui.chief.TaskReviewScreen
 import com.cumplr.app.ui.chief.TeamScreen
 import com.cumplr.app.ui.splash.SplashScreen
@@ -27,6 +28,7 @@ sealed class CumplrRoute(val route: String) {
     object TaskDetail    : CumplrRoute("task_detail/{taskId}")
     object TaskExecution : CumplrRoute("task_execution/{taskId}")
     object TaskReview    : CumplrRoute("task_review/{taskId}")
+    object TaskEdit      : CumplrRoute("task_edit/{taskId}")
     object ChiefTeam     : CumplrRoute("chief_team")
     object TaskCreate    : CumplrRoute("task_create")
 }
@@ -40,7 +42,7 @@ private fun UserRole.homeRoute() = when (this) {
 @Composable
 fun CumplrNavGraph(navController: NavHostController) {
     NavHost(
-        navController = navController,
+        navController    = navController,
         startDestination = CumplrRoute.Splash.route,
     ) {
         composable(CumplrRoute.Splash.route) {
@@ -82,7 +84,7 @@ fun CumplrNavGraph(navController: NavHostController) {
         }
 
         composable(
-            route = CumplrRoute.TaskDetail.route,
+            route     = CumplrRoute.TaskDetail.route,
             arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
         ) {
             TaskDetailScreen(
@@ -94,7 +96,7 @@ fun CumplrNavGraph(navController: NavHostController) {
         }
 
         composable(
-            route = CumplrRoute.TaskExecution.route,
+            route     = CumplrRoute.TaskExecution.route,
             arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
         ) {
             TaskExecutionScreen(
@@ -106,6 +108,7 @@ fun CumplrNavGraph(navController: NavHostController) {
                 },
             )
         }
+
         composable(CumplrRoute.ChiefHome.route) {
             ChiefHomeScreen(
                 onLogout = {
@@ -114,13 +117,23 @@ fun CumplrNavGraph(navController: NavHostController) {
                     }
                 },
                 onTaskReview = { taskId -> navController.navigate("task_review/$taskId") },
-                onTeamClick  = { navController.navigate(CumplrRoute.ChiefTeam.route) },
+                onTaskEdit   = { taskId -> navController.navigate("task_edit/$taskId") },
                 onAssignTask = { navController.navigate(CumplrRoute.TaskCreate.route) },
             )
         }
 
         composable(CumplrRoute.TaskCreate.route) {
             TaskCreateScreen(
+                onBack    = { navController.popBackStack() },
+                onSuccess = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route     = CumplrRoute.TaskEdit.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) {
+            TaskEditScreen(
                 onBack    = { navController.popBackStack() },
                 onSuccess = { navController.popBackStack() },
             )
@@ -143,6 +156,7 @@ fun CumplrNavGraph(navController: NavHostController) {
         composable(CumplrRoute.ChiefTeam.route) {
             TeamScreen(onBack = { navController.popBackStack() })
         }
+
         composable(CumplrRoute.AdminHome.route) {
             AdminHomeScreen(
                 onLogout = {

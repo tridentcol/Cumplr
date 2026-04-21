@@ -33,9 +33,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,39 +55,33 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrAccentInk
-import com.cumplr.core.ui.theme.CumplrBorder
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.Spacing
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskCreateScreen(
+fun TaskEditScreen(
     onBack: () -> Unit,
     onSuccess: () -> Unit,
-    viewModel: TaskCreateViewModel = hiltViewModel(),
+    viewModel: TaskEditViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val workers by viewModel.workers.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     LaunchedEffect(uiState) {
-        if (uiState is CreateTaskUiState.Success) onSuccess()
+        if (uiState is EditTaskUiState.Success) onSuccess()
     }
 
     var showDatePicker  by remember { mutableStateOf(false) }
     var showWorkerMenu  by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState()
-    val isSubmitting    = uiState is CreateTaskUiState.Submitting
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = viewModel.deadlineMillis,
+    )
 
-    // Time picker launcher (shown after date is confirmed)
     val showTimePicker: (onPick: (Int, Int) -> Unit) -> Unit = { onPick ->
         TimePickerDialog(
             context,
@@ -97,6 +91,9 @@ fun TaskCreateScreen(
             true,
         ).show()
     }
+
+    val isLoading    = uiState is EditTaskUiState.Loading
+    val isSubmitting = uiState is EditTaskUiState.Submitting
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -116,9 +113,16 @@ fun TaskCreateScreen(
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver", tint = CumplrFgMuted)
                 }
                 Text(
-                    text  = "Asignar tarea",
+                    text  = "Editar tarea",
                     style = MaterialTheme.typography.titleMedium,
                     color = CumplrFg,
+                )
+            }
+
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color    = CumplrAccent,
                 )
             }
 
@@ -137,8 +141,9 @@ fun TaskCreateScreen(
                     value         = viewModel.title,
                     onValueChange = { viewModel.title = it },
                     modifier      = Modifier.fillMaxWidth(),
-                    placeholder   = { Text("Ej. Revisión de inventario", color = CumplrFgMuted) },
+                    placeholder   = { Text("Título de la tarea", color = CumplrFgMuted) },
                     singleLine    = true,
+                    enabled       = !isLoading,
                     colors        = fieldColors(),
                     shape         = RoundedCornerShape(10.dp),
                 )
@@ -150,6 +155,7 @@ fun TaskCreateScreen(
                     modifier      = Modifier.fillMaxWidth().height(110.dp),
                     placeholder   = { Text("Instrucciones adicionales...", color = CumplrFgMuted) },
                     maxLines      = 5,
+                    enabled       = !isLoading,
                     colors        = fieldColors(),
                     shape         = RoundedCornerShape(10.dp),
                 )
@@ -161,6 +167,7 @@ fun TaskCreateScreen(
                     modifier      = Modifier.fillMaxWidth(),
                     placeholder   = { Text("Ej. Bodega principal", color = CumplrFgMuted) },
                     singleLine    = true,
+                    enabled       = !isLoading,
                     leadingIcon   = {
                         Icon(Icons.Outlined.LocationOn, null, tint = CumplrFgMuted, modifier = Modifier.size(18.dp))
                     },
@@ -175,7 +182,7 @@ fun TaskCreateScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(CumplrSurface)
-                            .clickable { showWorkerMenu = !showWorkerMenu }
+                            .clickable(enabled = !isLoading) { showWorkerMenu = !showWorkerMenu }
                             .padding(horizontal = Spacing.md, vertical = 14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically,
@@ -231,24 +238,25 @@ fun TaskCreateScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .background(CumplrSurface)
-                        .clickable { showDatePicker = true }
+                        .clickable(enabled = !isLoading) { showDatePicker = true }
                         .padding(horizontal = Spacing.md, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
                     val millis = viewModel.deadlineMillis
                     Text(
-                        text  = if (millis != null) formatDeadlineDisplay(millis, viewModel.deadlineHour, viewModel.deadlineMinute)
-                                else "Sin fecha límite",
+                        text  = if (millis != null)
+                            formatDeadlineDisplay(millis, viewModel.deadlineHour, viewModel.deadlineMinute)
+                        else "Sin fecha límite",
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (millis != null) CumplrFg else CumplrFgMuted,
                     )
                     Icon(Icons.Outlined.CalendarToday, "Fecha", tint = CumplrFgMuted, modifier = Modifier.size(18.dp))
                 }
 
-                if (uiState is CreateTaskUiState.Error) {
+                if (uiState is EditTaskUiState.Error) {
                     Text(
-                        text  = (uiState as CreateTaskUiState.Error).message,
+                        text  = (uiState as EditTaskUiState.Error).message,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -263,7 +271,7 @@ fun TaskCreateScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.lg, vertical = Spacing.md),
-                enabled  = viewModel.isFormValid && !isSubmitting,
+                enabled  = viewModel.isFormValid && !isLoading && !isSubmitting,
                 colors   = ButtonDefaults.buttonColors(
                     containerColor = CumplrAccent,
                     contentColor   = CumplrAccentInk,
@@ -273,7 +281,7 @@ fun TaskCreateScreen(
                 if (isSubmitting) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), color = CumplrAccentInk, strokeWidth = 2.dp)
                 } else {
-                    Text("Asignar tarea", style = MaterialTheme.typography.labelLarge)
+                    Text("Guardar cambios", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -306,26 +314,3 @@ fun TaskCreateScreen(
         }
     }
 }
-
-@Composable
-internal fun FormLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelMedium, color = CumplrFgMuted)
-}
-
-@Composable
-internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor        = CumplrFg,
-    unfocusedTextColor      = CumplrFg,
-    focusedContainerColor   = CumplrSurface,
-    unfocusedContainerColor = CumplrSurface,
-    focusedBorderColor      = CumplrAccent,
-    unfocusedBorderColor    = CumplrBorder,
-    cursorColor             = CumplrAccent,
-)
-
-internal fun formatDeadlineDisplay(millis: Long, hour: Int, minute: Int): String = runCatching {
-    val localDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-    val dateStr   = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()).format(localDate)
-    val timeStr   = "%02d:%02d".format(hour, minute)
-    "$dateStr · $timeStr"
-}.getOrElse { "" }

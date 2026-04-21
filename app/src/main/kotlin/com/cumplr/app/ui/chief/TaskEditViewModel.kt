@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.domain.enums.TaskPriority
@@ -16,38 +17,42 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import javax.inject.Inject
 
-sealed class CreateTaskUiState {
-    object Idle        : CreateTaskUiState()
-    object Submitting  : CreateTaskUiState()
-    object Success     : CreateTaskUiState()
-    data class Error(val message: String) : CreateTaskUiState()
+sealed class EditTaskUiState {
+    object Idle        : EditTaskUiState()
+    object Loading     : EditTaskUiState()
+    object Submitting  : EditTaskUiState()
+    object Success     : EditTaskUiState()
+    data class Error(val message: String) : EditTaskUiState()
 }
 
 @HiltViewModel
-class TaskCreateViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+class TaskEditViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val taskRepository: TaskRepository,
     private val userRepository: UserRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
+
+    val taskId: String = checkNotNull(savedStateHandle["taskId"])
 
     // ── Form fields ───────────────────────────────────────────────────────────
     var title          by mutableStateOf("")
     var description    by mutableStateOf("")
     var location       by mutableStateOf("")
     var selectedWorker by mutableStateOf<User?>(null)
-    var deadlineMillis by mutableStateOf<Long?>(null)  // UTC epoch millis from DatePicker
+    var deadlineMillis by mutableStateOf<Long?>(null)
     var deadlineHour   by mutableIntStateOf(9)
     var deadlineMinute by mutableIntStateOf(0)
 
@@ -63,8 +68,8 @@ class TaskCreateViewModel @Inject constructor(
         }
 
     // ── State ─────────────────────────────────────────────────────────────────
-    private val _uiState = MutableStateFlow<CreateTaskUiState>(CreateTaskUiState.Idle)
-    val uiState: StateFlow<CreateTaskUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow<EditTaskUiState>(EditTaskUiState.Loading)
+    val uiState: StateFlow<EditTaskUiState> = _uiState.asStateFlow()
 
     private val session = authRepository.getCurrentSession()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -73,8 +78,46 @@ class TaskCreateViewModel @Inject constructor(
         if (s != null) userRepository.getWorkersByCompany(s.companyId) else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private var assignedToId: String? = null
+
     val isFormValid: Boolean
         get() = title.isNotBlank() && selectedWorker != null
+
+    init {
+        // Load task and pre-fill form
+        viewModelScope.launch {
+            val task = taskRepository.getTask(taskId).filterNotNull().first()
+            title       = task.title
+            description = task.description.orEmpty()
+            location    = task.location.orEmpty()
+            assignedToId = task.assignedTo
+
+            task.deadline?.let { iso ->
+                runCatching {
+                    val zdt = Instant.parse(iso).atZone(ZoneId.systemDefault())
+                    // Store date as UTC epoch millis at midnight (matches DatePicker format)
+                    deadlineMillis = zdt.toLocalDate()
+                        .atStartOfDay(ZoneOffset.UTC)
+                        .toInstant()
+                        .toEpochMilli()
+                    deadlineHour   = zdt.hour
+                    deadlineMinute = zdt.minute
+                }
+            }
+
+            _uiState.value = EditTaskUiState.Idle
+        }
+
+        // Resolve the assigned worker once the workers list loads
+        viewModelScope.launch {
+            workers.collect { list ->
+                val id = assignedToId ?: return@collect
+                if (selectedWorker == null && list.isNotEmpty()) {
+                    selectedWorker = list.find { it.id == id }
+                }
+            }
+        }
+    }
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -82,30 +125,22 @@ class TaskCreateViewModel @Inject constructor(
         val worker = selectedWorker ?: return
         if (title.isBlank()) return
         viewModelScope.launch {
-            _uiState.value = CreateTaskUiState.Submitting
-            val s = authRepository.getCurrentSession().first() ?: run {
-                _uiState.value = CreateTaskUiState.Error("Sin sesión activa")
-                return@launch
-            }
-            val result = taskRepository.createTask(
+            _uiState.value = EditTaskUiState.Submitting
+            val result = taskRepository.updateTask(
+                taskId      = taskId,
                 title       = title.trim(),
                 description = description.trim().takeIf { it.isNotBlank() },
                 location    = location.trim().takeIf { it.isNotBlank() },
-                assignedTo  = worker.id,
                 deadline    = deadlineIso,
+                assignedTo  = worker.id,
                 priority    = TaskPriority.MEDIUM,
-                companyId   = s.companyId,
-                assignedBy  = s.userId,
             )
-            _uiState.value = if (result.isSuccess) {
-                CreateTaskUiState.Success
-            } else {
-                CreateTaskUiState.Error(result.exceptionOrNull()?.message ?: "Error al crear la tarea")
-            }
+            _uiState.value = if (result.isSuccess) EditTaskUiState.Success
+                             else EditTaskUiState.Error(result.exceptionOrNull()?.message ?: "Error al actualizar la tarea")
         }
     }
 
     fun dismissError() {
-        _uiState.value = CreateTaskUiState.Idle
+        if (_uiState.value is EditTaskUiState.Error) _uiState.value = EditTaskUiState.Idle
     }
 }

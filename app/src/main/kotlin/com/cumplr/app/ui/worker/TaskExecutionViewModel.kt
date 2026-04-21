@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.data.session.SessionManager
+import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.repository.StorageRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,12 +17,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
+import java.time.Duration
+import java.time.Instant
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -61,12 +65,32 @@ class TaskExecutionViewModel @Inject constructor(
     private val _uiState              = MutableStateFlow<ExecutionUiState>(ExecutionUiState.Idle)
     val uiState: StateFlow<ExecutionUiState> = _uiState.asStateFlow()
 
+    private var capturedStartTime: Instant? = null
     private var timerJob: Job? = null
 
+    init {
+        // Recover timer if task was already started before this ViewModel was created
+        viewModelScope.launch {
+            val task = taskRepository.getTask(taskId).filterNotNull().first()
+            if (task.status == TaskStatus.IN_PROGRESS && task.startTime != null) {
+                val recovered = runCatching { Instant.parse(task.startTime) }.getOrNull()
+                if (recovered != null) {
+                    capturedStartTime = recovered
+                    _step.value = 2
+                    startTimerFrom(recovered)
+                }
+            }
+        }
+    }
+
     fun onStartPhotoTaken(rawBytes: ByteArray) {
+        val now = Instant.now()
+        capturedStartTime = now
         _startPhotoBytes.value = rawBytes.withTimestamp()
         _step.value = 2
-        startTimer()
+        startTimerFrom(now)
+        // Persist start time immediately so it survives app kill / phone reboot
+        viewModelScope.launch { taskRepository.markTaskStarted(taskId, now.toString()) }
     }
 
     fun goToStep3() { _step.value = 3 }
@@ -86,6 +110,7 @@ class TaskExecutionViewModel @Inject constructor(
     fun submit() {
         val startBytes = _startPhotoBytes.value ?: return
         val endBytes   = _endPhotoBytes.value   ?: return
+        val startTime  = capturedStartTime?.toString() ?: Instant.now().toString()
         viewModelScope.launch {
             _uiState.value = ExecutionUiState.Uploading
             val session = sessionManager.getSession().first()
@@ -107,7 +132,7 @@ class TaskExecutionViewModel @Inject constructor(
                 return@launch
             }
 
-            taskRepository.startTask(taskId, startResult.getOrThrow())
+            taskRepository.startTask(taskId, startResult.getOrThrow(), startTime)
 
             val endResult = storageRepository.uploadTaskPhoto(
                 companyId  = session.companyId,
@@ -134,12 +159,12 @@ class TaskExecutionViewModel @Inject constructor(
         }
     }
 
-    private fun startTimer() {
+    private fun startTimerFrom(startTime: Instant) {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (isActive) {
+                _elapsedSeconds.value = Duration.between(startTime, Instant.now()).seconds.coerceAtLeast(0L)
                 delay(1_000)
-                _elapsedSeconds.update { it + 1 }
             }
         }
     }
@@ -153,10 +178,10 @@ class TaskExecutionViewModel @Inject constructor(
         val bitmap = BitmapFactory.decodeByteArray(this, 0, size)
             ?.copy(Bitmap.Config.ARGB_8888, true) ?: return this
         val canvas = Canvas(bitmap)
-        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+        val timestamp = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
         val paint = Paint().apply {
-            color     = android.graphics.Color.WHITE
-            textSize  = bitmap.height * 0.04f
+            color       = android.graphics.Color.WHITE
+            textSize    = bitmap.height * 0.04f
             isAntiAlias = true
             setShadowLayer(4f, 2f, 2f, android.graphics.Color.BLACK)
         }
