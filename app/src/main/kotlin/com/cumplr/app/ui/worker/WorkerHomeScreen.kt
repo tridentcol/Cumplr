@@ -57,10 +57,12 @@ import com.cumplr.core.ui.component.TaskCard
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrAccentInk
 import com.cumplr.core.ui.theme.CumplrBackground
+import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.Spacing
+import java.time.LocalTime
 
 private data class TabDef(val label: String, val filter: (Task) -> Boolean)
 
@@ -83,6 +85,7 @@ fun WorkerHomeScreen(
     val isLoading    by viewModel.isLoading.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val tasks        by viewModel.tasks.collectAsStateWithLifecycle()
+    val userName     by viewModel.userName.collectAsStateWithLifecycle()
 
     LaunchedEffect(didLogOut) { if (didLogOut) onLogout() }
 
@@ -105,6 +108,11 @@ fun WorkerHomeScreen(
                         )
                     }
                 },
+            )
+
+            GreetingHeader(
+                name      = userName,
+                taskCount = tasks.count { it.status == TaskStatus.ASSIGNED || it.status == TaskStatus.IN_PROGRESS },
             )
 
             ScrollableTabRow(
@@ -184,6 +192,40 @@ fun WorkerHomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GreetingHeader(name: String, taskCount: Int) {
+    if (name.isBlank()) return
+    val hour = LocalTime.now().hour
+    val salutation = when {
+        hour < 12 -> "Buenos días"
+        hour < 18 -> "Buenas tardes"
+        else      -> "Buenas noches"
+    }
+    val firstName = name.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: name
+    val subtitle = when (taskCount) {
+        0    -> "No hay tareas pendientes."
+        1    -> "Tienes 1 tarea activa."
+        else -> "Tienes $taskCount tareas activas."
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+    ) {
+        Text(
+            text  = "$salutation, $firstName.",
+            style = MaterialTheme.typography.titleLarge,
+            color = CumplrFg,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text  = subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = CumplrFgMuted,
+        )
     }
 }
 

@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.cumplr.app.ui.admin.AdminHomeScreen
 import com.cumplr.app.ui.auth.LoginScreen
 import com.cumplr.app.ui.chief.ChiefHomeScreen
+import com.cumplr.app.ui.chief.TaskCreateScreen
 import com.cumplr.app.ui.chief.TaskReviewScreen
 import com.cumplr.app.ui.chief.TeamScreen
 import com.cumplr.app.ui.splash.SplashScreen
@@ -27,6 +28,7 @@ sealed class CumplrRoute(val route: String) {
     object TaskExecution : CumplrRoute("task_execution/{taskId}")
     object TaskReview    : CumplrRoute("task_review/{taskId}")
     object ChiefTeam     : CumplrRoute("chief_team")
+    object TaskCreate    : CumplrRoute("task_create")
 }
 
 private fun UserRole.homeRoute() = when (this) {
@@ -113,6 +115,14 @@ fun CumplrNavGraph(navController: NavHostController) {
                 },
                 onTaskReview = { taskId -> navController.navigate("task_review/$taskId") },
                 onTeamClick  = { navController.navigate(CumplrRoute.ChiefTeam.route) },
+                onAssignTask = { navController.navigate(CumplrRoute.TaskCreate.route) },
+            )
+        }
+
+        composable(CumplrRoute.TaskCreate.route) {
+            TaskCreateScreen(
+                onBack    = { navController.popBackStack() },
+                onSuccess = { navController.popBackStack() },
             )
         }
 

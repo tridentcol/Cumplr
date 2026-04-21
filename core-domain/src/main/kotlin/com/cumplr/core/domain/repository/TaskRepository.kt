@@ -1,5 +1,6 @@
 package com.cumplr.core.domain.repository
 
+import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.model.Task
 import kotlinx.coroutines.flow.Flow
 
@@ -17,4 +18,13 @@ interface TaskRepository {
     suspend fun submitTask(taskId: String, photoEndUrl: String, observations: String?): Result<Unit>
     suspend fun approveTask(taskId: String, feedback: String?): Result<Unit>
     suspend fun rejectTask(taskId: String, rejectionReason: String): Result<Unit>
+    suspend fun createTask(
+        title: String,
+        description: String?,
+        assignedTo: String,
+        deadline: String?,
+        priority: TaskPriority,
+        companyId: String,
+        assignedBy: String,
+    ): Result<Task>
 }

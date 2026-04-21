@@ -39,15 +39,18 @@ class ChiefHomeViewModel @Inject constructor(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    val chiefName: StateFlow<String> = session.map { it?.name ?: "" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
     private val tasks = session.flatMapLatest { s ->
         if (s != null) taskRepository.getTasksByCompany(s.companyId) else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val users = session.flatMapLatest { s ->
+    val workers: StateFlow<List<User>> = session.flatMapLatest { s ->
         if (s != null) userRepository.getWorkersByCompany(s.companyId) else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val tasksWithWorkers: StateFlow<List<TaskWithWorker>> = combine(tasks, users) { taskList, userList ->
+    val tasksWithWorkers: StateFlow<List<TaskWithWorker>> = combine(tasks, workers) { taskList, userList ->
         taskList.map { task -> TaskWithWorker(task, userList.find { it.id == task.assignedTo }) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -63,7 +66,7 @@ class ChiefHomeViewModel @Inject constructor(
         if (s != null) taskRepository.getOverdueCount(s.companyId) else flowOf(0)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val activeWorkersCount: StateFlow<Int> = users
+    val activeWorkersCount: StateFlow<Int> = workers
         .map { list -> list.count { it.active } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
