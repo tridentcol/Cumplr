@@ -23,6 +23,9 @@ private val IMAGE_MT = "image/jpeg".toMediaType()
 private data class SignInBody(val email: String, val password: String)
 
 @Serializable
+private data class RefreshTokenBody(@SerialName("refresh_token") val refreshToken: String)
+
+@Serializable
 private data class AuthTokenResponse(
     @SerialName("access_token")  val accessToken: String,
     @SerialName("refresh_token") val refreshToken: String = "",
@@ -50,7 +53,8 @@ class SupabaseRestClient @Inject constructor() {
 
     // ── Auth ──────────────────────────────────────────────────────────────────
 
-    fun signIn(email: String, password: String): Pair<String, String> {
+    // Returns Triple(accessToken, refreshToken, userId)
+    fun signIn(email: String, password: String): Triple<String, String, String> {
         val bodyStr = json.encodeToString(SignInBody(email, password))
         val request = Request.Builder()
             .url("${SupabaseConfig.url}/auth/v1/token?grant_type=password")
@@ -69,7 +73,28 @@ class SupabaseRestClient @Inject constructor() {
 
         val parsed = json.decodeFromString<AuthTokenResponse>(body)
         Log.d(TAG, "signIn OK — userId=${parsed.user.id}")
-        return parsed.accessToken to parsed.user.id
+        return Triple(parsed.accessToken, parsed.refreshToken, parsed.user.id)
+    }
+
+    // Returns Pair(newAccessToken, newRefreshToken)
+    fun refreshToken(refreshToken: String): Pair<String, String> {
+        val bodyStr = json.encodeToString(RefreshTokenBody(refreshToken))
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/auth/v1/token?grant_type=refresh_token")
+            .post(bodyStr.toRequestBody(JSON_MT))
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Content-Type", "application/json")
+            .build()
+
+        Log.d(TAG, "▶ POST /auth/v1/token?grant_type=refresh_token")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}  body=${body.take(200)}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+
+        val parsed = json.decodeFromString<AuthTokenResponse>(body)
+        return parsed.accessToken to parsed.refreshToken
     }
 
     // ── Users ─────────────────────────────────────────────────────────────────

@@ -8,4 +8,5 @@ data class SessionData(
     val role: UserRole,
     val name: String,
     val accessToken: String = "",
+    val refreshToken: String = "",
 )
