@@ -6,6 +6,7 @@ import com.cumplr.core.data.local.mapper.toDomain
 import com.cumplr.core.data.local.mapper.toEntity
 import com.cumplr.core.data.remote.SupabaseRestClient
 import com.cumplr.core.data.session.SessionManager
+import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.repository.TaskRepository
@@ -19,6 +20,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.Instant
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -179,6 +181,57 @@ class TaskRepositoryImpl @Inject constructor(
                 Result.success(Unit)
             } catch (e: Exception) { Result.failure(e) }
         }
+
+    override suspend fun createTask(
+        title: String,
+        description: String?,
+        assignedTo: String,
+        deadline: String?,
+        priority: TaskPriority,
+        companyId: String,
+        assignedBy: String,
+    ): Result<Task> = withContext(Dispatchers.IO) {
+        try {
+            val now    = Instant.now().toString()
+            val taskId = UUID.randomUUID().toString()
+            val entity = com.cumplr.core.data.local.entity.TaskEntity(
+                id              = taskId,
+                companyId       = companyId,
+                title           = title,
+                description     = description,
+                assignedTo      = assignedTo,
+                assignedBy      = assignedBy,
+                status          = TaskStatus.ASSIGNED.name,
+                priority        = priority.name,
+                deadline        = deadline,
+                startTime       = null,
+                endTime         = null,
+                photoStartUrl   = null,
+                photoEndUrl     = null,
+                observations    = null,
+                feedback        = null,
+                rejectionReason = null,
+                createdAt       = now,
+                updatedAt       = now,
+                syncPending     = false,
+            )
+            taskDao.upsertTask(entity)
+            val task = entity.toDomain()
+            try {
+                val session = sessionManager.getSession().first()
+                if (session?.accessToken?.isNotBlank() == true) {
+                    val body = json.encodeToString(
+                        CreateTaskBody(taskId, companyId, title, description, assignedTo, assignedBy, priority.name, deadline, now, now)
+                    )
+                    restClient.postTask(session.accessToken, body)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "createTask sync failed: ${e.message}")
+                taskDao.markSyncPending(taskId)
+            }
+            Result.success(task)
+        } catch (e: Exception) { Result.failure(e) }
+    }
 }
 
 @Serializable private data class StartTaskBody(
@@ -206,4 +259,18 @@ class TaskRepositoryImpl @Inject constructor(
     val status: String,
     @SerialName("rejection_reason") val rejectionReason: String,
     @SerialName("updated_at")       val updatedAt: String,
+)
+
+@Serializable private data class CreateTaskBody(
+    val id: String,
+    @SerialName("company_id")  val companyId: String,
+    val title: String,
+    val description: String?,
+    @SerialName("assigned_to") val assignedTo: String,
+    @SerialName("assigned_by") val assignedBy: String,
+    val priority: String,
+    val deadline: String?,
+    @SerialName("created_at")  val createdAt: String,
+    @SerialName("updated_at")  val updatedAt: String,
+    val status: String = "ASSIGNED",
 )

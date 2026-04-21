@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,6 +26,10 @@ class WorkerHomeViewModel @Inject constructor(
 
     private val _didLogOut    = MutableStateFlow(false)
     val didLogOut: StateFlow<Boolean> = _didLogOut.asStateFlow()
+
+    val userName: StateFlow<String> = authRepository.getCurrentSession()
+        .map { it?.name ?: "" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     private val _isLoading    = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()

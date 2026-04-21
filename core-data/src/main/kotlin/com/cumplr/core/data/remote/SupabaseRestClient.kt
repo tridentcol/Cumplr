@@ -151,6 +151,24 @@ class SupabaseRestClient @Inject constructor() {
         return json.decodeFromString<List<UserDto>>(body)
     }
 
+    fun postTask(accessToken: String, jsonBody: String) {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/tasks")
+            .post(jsonBody.toRequestBody(JSON_MT))
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=minimal")
+            .build()
+
+        Log.d(TAG, "▶ POST /rest/v1/tasks  body=${jsonBody.take(200)}")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ code=${response.code}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+    }
+
     fun patchTask(accessToken: String, taskId: String, jsonBody: String) {
         val request = Request.Builder()
             .url("${SupabaseConfig.url}/rest/v1/tasks?id=eq.$taskId")

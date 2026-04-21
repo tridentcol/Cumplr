@@ -22,7 +22,8 @@ import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressBg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
-import com.cumplr.core.ui.theme.CumplrSurface2
+import com.cumplr.core.ui.theme.CumplrStatusSubmittedBg
+import com.cumplr.core.ui.theme.CumplrStatusSubmittedFg
 import com.cumplr.core.ui.theme.Radius
 import com.cumplr.core.ui.theme.Spacing
 
@@ -31,8 +32,8 @@ private data class ChipStyle(val bg: Color, val fg: Color, val label: String)
 private fun chipStyleFor(status: TaskStatus) = when (status) {
     TaskStatus.ASSIGNED     -> ChipStyle(CumplrStatusAssignedBg, CumplrStatusAssignedFg, "Asignada")
     TaskStatus.IN_PROGRESS  -> ChipStyle(CumplrStatusProgressBg, CumplrStatusProgressFg, "En progreso")
-    TaskStatus.SUBMITTED    -> ChipStyle(CumplrSurface2,         CumplrFgMuted,           "Enviada")
-    TaskStatus.UNDER_REVIEW -> ChipStyle(CumplrSurface2,         CumplrFgMuted,           "En revisión")
+    TaskStatus.SUBMITTED    -> ChipStyle(CumplrStatusSubmittedBg, CumplrStatusSubmittedFg, "Enviada")
+    TaskStatus.UNDER_REVIEW -> ChipStyle(CumplrStatusSubmittedBg, CumplrStatusSubmittedFg, "En revisión")
     TaskStatus.APPROVED     -> ChipStyle(CumplrStatusDoneBg,     CumplrStatusDoneFg,      "Aprobada")
     TaskStatus.REJECTED     -> ChipStyle(CumplrStatusOverdueBg,  CumplrStatusOverdueFg,   "Rechazada")
 }

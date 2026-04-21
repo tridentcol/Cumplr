@@ -34,3 +34,15 @@ val CumplrStatusOverdueBg = Color(0xFF450A0A)
 // Status — Assigned
 val CumplrStatusAssignedFg = Color(0xFF9CA3AF)
 val CumplrStatusAssignedBg = Color(0xFF1F2937)
+
+// Status — Submitted / Under Review (blue)
+val CumplrStatusSubmittedFg = Color(0xFF93C5FD)
+val CumplrStatusSubmittedBg = Color(0xFF172554)
+
+// Role badge colors
+val CumplrRoleAdminFg  = Color(0xFFDDD6FE)
+val CumplrRoleAdminBg  = Color(0xFF4C1D95)
+val CumplrRoleChiefFg  = Color(0xFFBFDBFE)
+val CumplrRoleChiefBg  = Color(0xFF1E3A5F)
+val CumplrRoleWorkerFg = Color(0xFF6EE7B7)
+val CumplrRoleWorkerBg = Color(0xFF065F46)
