@@ -29,7 +29,7 @@ class AuthRepositoryImpl @Inject constructor(
 
                 // ── Step 1: direct REST call to /auth/v1/token ──────────────
                 Log.d(TAG, "Step 1 › POST /auth/v1/token?grant_type=password")
-                val (accessToken, userId) = restClient.signIn(email, password)
+                val (accessToken, refreshToken, userId) = restClient.signIn(email, password)
                 Log.d(TAG, "Step 1 › OK — userId=$userId")
 
                 // ── Step 2: fetch public.users row ───────────────────────────
@@ -58,11 +58,12 @@ class AuthRepositoryImpl @Inject constructor(
                 val user = userDto.toDomain()
                 sessionManager.saveSession(
                     SessionData(
-                        userId      = user.id,
-                        companyId   = user.companyId,
-                        role        = user.role,
-                        name        = user.name,
-                        accessToken = accessToken,
+                        userId       = user.id,
+                        companyId    = user.companyId,
+                        role         = user.role,
+                        name         = user.name,
+                        accessToken  = accessToken,
+                        refreshToken = refreshToken,
                     )
                 )
                 Log.d(TAG, "─── signIn() success — role=${user.role} ───")

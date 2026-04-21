@@ -32,11 +32,29 @@ class StorageRepositoryImpl @Inject constructor(
 
             val compressed = imageBytes.compressToMaxSide()
             val path = "companies/$companyId/tasks/$taskId/$type.jpg"
-            val url = restClient.uploadFile(session.accessToken, BUCKET, path, compressed)
+
+            val url = try {
+                restClient.uploadFile(session.accessToken, BUCKET, path, compressed)
+            } catch (e: Exception) {
+                if (isAuthError(e) && session.refreshToken.isNotBlank()) {
+                    val (newAccessToken, newRefreshToken) = restClient.refreshToken(session.refreshToken)
+                    sessionManager.updateTokens(newAccessToken, newRefreshToken)
+                    restClient.uploadFile(newAccessToken, BUCKET, path, compressed)
+                } else {
+                    throw e
+                }
+            }
+
             Result.success(url)
         } catch (e: Exception) {
             Result.failure(Exception("Error al subir imagen: ${e.message}"))
         }
+    }
+
+    private fun isAuthError(e: Exception): Boolean {
+        val msg = e.message ?: ""
+        return msg.contains("HTTP 401") || msg.contains("HTTP 403") ||
+            msg.contains("Unauthorized") || msg.contains("exp")
     }
 
     private fun ByteArray.compressToMaxSide(maxSide: Int = 800, quality: Int = 80): ByteArray {
