@@ -1,18 +1,24 @@
 package com.cumplr.core.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
@@ -32,60 +38,78 @@ fun TaskCard(
     modifier: Modifier = Modifier,
     assignerName: String? = null,
 ) {
-    CumplrCard(
-        modifier = modifier.fillMaxWidth(),
-        onClick = onClick,
-    ) {
-        // Title + status chip
+    CumplrCard(modifier = modifier.fillMaxWidth(), onClick = onClick) {
+        // Title row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
             Text(
-                text = task.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = CumplrFg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                text       = task.title,
+                style      = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color      = CumplrFg,
+                maxLines   = 2,
+                overflow   = TextOverflow.Ellipsis,
+                modifier   = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(Spacing.sm))
-            CumplrChip(status = task.status)
-        }
-
-        // Description
-        val description = task.description
-        if (!description.isNullOrBlank()) {
-            Spacer(Modifier.height(Spacing.xs))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyLarge,
-                color = CumplrFgMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            CumplrChip(status = task.status, modifier = Modifier)
         }
 
         Spacer(Modifier.height(Spacing.sm))
 
-        // Deadline + assigner row
-        val deadline = task.deadline
+        // Time + location / assigner row
+        val deadline  = task.deadline
+        val location  = task.location.orEmpty()
+        val assigner  = assignerName
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             if (deadline != null) {
-                Text(
-                    text = formatDeadline(deadline),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = deadlineColor(deadline),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Schedule,
+                        contentDescription = null,
+                        tint     = CumplrFgMuted,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text  = formatDeadlineTime(deadline),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = deadlineColor(deadline),
+                    )
+                }
             }
-            if (assignerName != null) {
+            if (location.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint     = CumplrFgMuted,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text     = location,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = CumplrFgMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (assigner != null) {
+                Spacer(Modifier.weight(1f))
                 Text(
-                    text = assignerName,
+                    text  = assigner,
                     style = MaterialTheme.typography.bodySmall,
                     color = CumplrFgMuted,
                 )
@@ -94,28 +118,16 @@ fun TaskCard(
     }
 }
 
-private fun deadlineColor(deadline: String): Color {
-    return try {
-        val deadlineInstant = Instant.parse(deadline)
-        val now = Instant.now()
-        val hours = java.time.Duration.between(now, deadlineInstant).toHours()
-        when {
-            hours < 0  -> CumplrStatusOverdueFg
-            hours < 24 -> CumplrStatusProgressFg
-            else       -> CumplrStatusDoneFg
-        }
-    } catch (_: Exception) {
-        CumplrFgMuted
+private fun deadlineColor(deadline: String) = try {
+    val hours = java.time.Duration.between(Instant.now(), Instant.parse(deadline)).toHours()
+    when {
+        hours < 0  -> CumplrStatusOverdueFg
+        hours < 24 -> CumplrStatusProgressFg
+        else       -> CumplrStatusDoneFg
     }
-}
+} catch (_: Exception) { CumplrFgMuted }
 
-private fun formatDeadline(deadline: String): String {
-    return try {
-        val instant = Instant.parse(deadline)
-        val zdt = instant.atZone(ZoneId.systemDefault())
-        val formatter = DateTimeFormatter.ofPattern("dd MMM · HH:mm", Locale.getDefault())
-        "Vence: ${zdt.format(formatter)}"
-    } catch (_: Exception) {
-        deadline
-    }
-}
+private fun formatDeadlineTime(deadline: String): String = try {
+    val zdt = Instant.parse(deadline).atZone(ZoneId.systemDefault())
+    DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()).format(zdt)
+} catch (_: Exception) { deadline }

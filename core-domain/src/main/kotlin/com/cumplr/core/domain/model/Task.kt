@@ -8,6 +8,7 @@ data class Task(
     val companyId: String,
     val title: String,
     val description: String?,
+    val location: String?,
     val assignedTo: String,
     val assignedBy: String,
     val status: TaskStatus,

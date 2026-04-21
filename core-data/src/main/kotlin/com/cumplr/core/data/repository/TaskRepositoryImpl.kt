@@ -57,7 +57,7 @@ class TaskRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun startTask(taskId: String, photoStartUrl: String): Result<Unit> =
+    override suspend fun startTask(taskId: String, photoStartUrl: String, startTime: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
                 val now = Instant.now().toString()
@@ -65,14 +65,14 @@ class TaskRepositoryImpl @Inject constructor(
                     taskId        = taskId,
                     status        = TaskStatus.IN_PROGRESS.name,
                     photoStartUrl = photoStartUrl,
-                    startTime     = now,
+                    startTime     = startTime,
                     updatedAt     = now,
                     syncPending   = 0,
                 )
                 try {
                     val session = sessionManager.getSession().first()
                     if (session != null && session.accessToken.isNotBlank()) {
-                        val body = json.encodeToString(StartTaskBody("IN_PROGRESS", photoStartUrl, now, now))
+                        val body = json.encodeToString(StartTaskBody("IN_PROGRESS", photoStartUrl, startTime, now))
                         restClient.patchTask(session.accessToken, taskId, body)
                     }
                 } catch (e: Exception) {
@@ -182,9 +182,57 @@ class TaskRepositoryImpl @Inject constructor(
             } catch (e: Exception) { Result.failure(e) }
         }
 
+    override suspend fun markTaskStarted(taskId: String, startTime: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            try {
+                val now = Instant.now().toString()
+                taskDao.markTaskStarted(taskId, TaskStatus.IN_PROGRESS.name, startTime, now, 0)
+                try {
+                    val session = sessionManager.getSession().first()
+                    if (session?.accessToken?.isNotBlank() == true) {
+                        val body = json.encodeToString(MarkStartedBody(TaskStatus.IN_PROGRESS.name, startTime, now))
+                        restClient.patchTask(session.accessToken, taskId, body)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "markTaskStarted sync failed: ${e.message}")
+                    taskDao.markSyncPending(taskId)
+                }
+                Result.success(Unit)
+            } catch (e: Exception) { Result.failure(e) }
+        }
+
+    override suspend fun updateTask(
+        taskId: String,
+        title: String,
+        description: String?,
+        location: String?,
+        deadline: String?,
+        assignedTo: String,
+        priority: TaskPriority,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val now = Instant.now().toString()
+            taskDao.updateTask(taskId, title, description, location, deadline, assignedTo, priority.name, now, 0)
+            try {
+                val session = sessionManager.getSession().first()
+                if (session?.accessToken?.isNotBlank() == true) {
+                    val body = json.encodeToString(
+                        UpdateTaskBody(title, description, location, assignedTo, deadline, priority.name, now)
+                    )
+                    restClient.patchTask(session.accessToken, taskId, body)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "updateTask sync failed: ${e.message}")
+                taskDao.markSyncPending(taskId)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     override suspend fun createTask(
         title: String,
         description: String?,
+        location: String?,
         assignedTo: String,
         deadline: String?,
         priority: TaskPriority,
@@ -199,6 +247,7 @@ class TaskRepositoryImpl @Inject constructor(
                 companyId       = companyId,
                 title           = title,
                 description     = description,
+                location        = location,
                 assignedTo      = assignedTo,
                 assignedBy      = assignedBy,
                 status          = TaskStatus.ASSIGNED.name,
@@ -221,7 +270,7 @@ class TaskRepositoryImpl @Inject constructor(
                 val session = sessionManager.getSession().first()
                 if (session?.accessToken?.isNotBlank() == true) {
                     val body = json.encodeToString(
-                        CreateTaskBody(taskId, companyId, title, description, assignedTo, assignedBy, priority.name, deadline, now, now)
+                        CreateTaskBody(taskId, companyId, title, description, location, assignedTo, assignedBy, priority.name, deadline, now, now)
                     )
                     restClient.postTask(session.accessToken, body)
                 }
@@ -266,6 +315,7 @@ class TaskRepositoryImpl @Inject constructor(
     @SerialName("company_id")  val companyId: String,
     val title: String,
     val description: String?,
+    val location: String?,
     @SerialName("assigned_to") val assignedTo: String,
     @SerialName("assigned_by") val assignedBy: String,
     val priority: String,
@@ -273,4 +323,20 @@ class TaskRepositoryImpl @Inject constructor(
     @SerialName("created_at")  val createdAt: String,
     @SerialName("updated_at")  val updatedAt: String,
     val status: String = "ASSIGNED",
+)
+
+@Serializable private data class MarkStartedBody(
+    val status: String,
+    @SerialName("start_time")  val startTime: String,
+    @SerialName("updated_at")  val updatedAt: String,
+)
+
+@Serializable private data class UpdateTaskBody(
+    val title: String,
+    val description: String?,
+    val location: String?,
+    @SerialName("assigned_to") val assignedTo: String,
+    val deadline: String?,
+    val priority: String,
+    @SerialName("updated_at")  val updatedAt: String,
 )
