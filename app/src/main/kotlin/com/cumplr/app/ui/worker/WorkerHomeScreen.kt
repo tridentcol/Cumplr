@@ -449,7 +449,7 @@ private fun WorkerNotificationsTab(
                         notif   = notif,
                         onClick = {
                             if (!notif.read) onMarkRead(notif.id)
-                            if (notif.taskId != null) onTaskClick(notif.taskId, null)
+                            notif.taskId?.let { onTaskClick(it, null) }
                         },
                     )
                 }
