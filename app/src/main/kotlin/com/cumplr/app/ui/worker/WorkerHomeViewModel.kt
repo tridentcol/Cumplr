@@ -71,10 +71,18 @@ class WorkerHomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val session = authRepository.getCurrentSession().first()
-            if (session != null) taskRepository.refresh(session.userId)
+            if (session != null) {
+                taskRepository.refresh(session.userId)
+                taskRepository.startRealtimeForWorker(session.userId)
+            }
             _isLoading.value = false
         }
         startPolling()
+    }
+
+    override fun onCleared() {
+        taskRepository.stopRealtime()
+        super.onCleared()
     }
 
     private fun startPolling() {

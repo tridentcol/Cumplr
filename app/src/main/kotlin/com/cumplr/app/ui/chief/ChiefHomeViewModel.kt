@@ -87,8 +87,14 @@ class ChiefHomeViewModel @Inject constructor(
             val s = authRepository.getCurrentSession().first { it != null } ?: return@launch
             taskRepository.refreshCompanyTasks(s.companyId)
             userRepository.refreshCompanyUsers(s.companyId)
+            taskRepository.startRealtimeForChief(s.companyId)
         }
         startPolling()
+    }
+
+    override fun onCleared() {
+        taskRepository.stopRealtime()
+        super.onCleared()
     }
 
     private fun startPolling() {
