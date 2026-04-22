@@ -18,6 +18,7 @@ interface TaskRepository {
     suspend fun submitTask(taskId: String, photoEndUrl: String, observations: String?): Result<Unit>
     suspend fun approveTask(taskId: String, feedback: String?): Result<Unit>
     suspend fun rejectTask(taskId: String, rejectionReason: String): Result<Unit>
+    suspend fun reopenTask(taskId: String): Result<Unit>
     suspend fun markTaskStarted(taskId: String, startTime: String): Result<Unit>
     suspend fun updateTask(
         taskId: String,

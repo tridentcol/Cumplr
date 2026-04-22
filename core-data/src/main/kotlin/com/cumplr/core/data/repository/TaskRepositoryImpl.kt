@@ -218,6 +218,24 @@ class TaskRepositoryImpl @Inject constructor(
             } catch (e: Exception) { Result.failure(e) }
         }
 
+    override suspend fun reopenTask(taskId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val now = Instant.now().toString()
+            taskDao.reopenTask(taskId, TaskStatus.IN_PROGRESS.name, now, 0)
+            try {
+                val session = sessionManager.getSession().first()
+                if (session?.accessToken?.isNotBlank() == true) {
+                    val body = json.encodeToString(ReopenTaskBody(TaskStatus.IN_PROGRESS.name, now))
+                    restClient.patchTask(session.accessToken, taskId, body)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "reopenTask sync failed: ${e.message}")
+                taskDao.markSyncPending(taskId)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
     override suspend fun markTaskStarted(taskId: String, startTime: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
@@ -359,6 +377,13 @@ class TaskRepositoryImpl @Inject constructor(
     @SerialName("created_at")  val createdAt: String,
     @SerialName("updated_at")  val updatedAt: String,
     val status: String = "ASSIGNED",
+)
+
+@Serializable private data class ReopenTaskBody(
+    val status: String,
+    @SerialName("updated_at")    val updatedAt: String,
+    @SerialName("photo_end_url") val photoEndUrl: String? = null,
+    @SerialName("end_time")      val endTime: String? = null,
 )
 
 @Serializable private data class MarkStartedBody(

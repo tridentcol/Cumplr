@@ -67,6 +67,7 @@ import com.cumplr.core.domain.model.User
 import com.cumplr.core.ui.component.CumplrBottomNav
 import com.cumplr.core.ui.component.CumplrNavItem
 import com.cumplr.core.ui.component.EmptyState
+import com.cumplr.core.ui.component.OfflineBanner
 import com.cumplr.core.ui.component.TaskCard
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrAccentInk
@@ -88,7 +89,7 @@ private data class ChiefTabDef(val label: String, val filter: (TaskWithWorker) -
 private val CHIEF_TASK_TABS = listOf(
     ChiefTabDef("Por revisar")  { it.task.status == TaskStatus.SUBMITTED || it.task.status == TaskStatus.UNDER_REVIEW },
     ChiefTabDef("En ejecución") { it.task.status == TaskStatus.ASSIGNED  || it.task.status == TaskStatus.IN_PROGRESS },
-    ChiefTabDef("Cumplidas")    { it.task.status == TaskStatus.APPROVED },
+    ChiefTabDef("Finalizadas")  { it.task.status == TaskStatus.APPROVED  || it.task.status == TaskStatus.REJECTED },
 )
 
 private val CHIEF_NAV_ITEMS = listOf(
@@ -141,11 +142,13 @@ fun ChiefHomeScreen(
             }
         },
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            OfflineBanner()
+        Box(modifier = Modifier.weight(1f)) {
             when (selectedNav) {
                 "inicio" -> ChiefInicioTab(
                     chiefName          = chiefName,
@@ -157,7 +160,7 @@ fun ChiefHomeScreen(
                     pendingReviewCount = pendingReviewCount,
                     onGoToTareas       = { selectedNav = "tareas" },
                 )
-                "equipo" -> ChiefEquipoTab(workers = workers)
+                "equipo" -> ChiefEquipoTab(workers = workers, tasksWithWorkers = tasksWithWorkers)
                 "tareas" -> ChiefTareasTab(
                     tasksWithWorkers = tasksWithWorkers,
                     isRefreshing     = isRefreshing,
@@ -173,6 +176,7 @@ fun ChiefHomeScreen(
                 )
             }
         }
+        } // close Column
     }
 }
 
@@ -384,7 +388,7 @@ private fun WorkerAvatarStack(workers: List<User>) {
 // ── Equipo tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ChiefEquipoTab(workers: List<User>) {
+private fun ChiefEquipoTab(workers: List<User>, tasksWithWorkers: List<TaskWithWorker>) {
     if (workers.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             EmptyState(
@@ -401,70 +405,100 @@ private fun ChiefEquipoTab(workers: List<User>) {
         modifier            = Modifier.fillMaxSize(),
     ) {
         items(workers, key = { it.id }) { worker ->
-            WorkerRow(worker = worker)
+            val workerTasks = tasksWithWorkers.filter { it.task.assignedTo == worker.id }
+            val approved    = workerTasks.count { it.task.status == TaskStatus.APPROVED }
+            val finished    = workerTasks.count { it.task.status == TaskStatus.APPROVED || it.task.status == TaskStatus.REJECTED }
+            val rate        = if (finished > 0) approved.toFloat() / finished else null
+            WorkerRow(worker = worker, approvalRate = rate, taskCount = workerTasks.size)
         }
     }
 }
 
 @Composable
-private fun WorkerRow(worker: User) {
-    Row(
+private fun WorkerRow(worker: User, approvalRate: Float?, taskCount: Int) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(CumplrSurface)
             .padding(Spacing.md),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(CumplrAccent.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
+        Row(
+            verticalAlignment     = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Text(
-                text  = worker.name.firstOrNull()?.uppercase() ?: "?",
-                style = MaterialTheme.typography.titleSmall,
-                color = CumplrAccent,
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text     = worker.name,
-                style    = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color    = CumplrFg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val sub = listOfNotNull(worker.position, worker.email).joinToString(" · ")
-            if (sub.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(CumplrAccent.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    text     = sub,
-                    style    = MaterialTheme.typography.bodySmall,
-                    color    = CumplrFgMuted,
+                    text  = worker.name.firstOrNull()?.uppercase() ?: "?",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = CumplrAccent,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text     = worker.name,
+                    style    = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color    = CumplrFg,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val sub = listOfNotNull(worker.position, worker.email).joinToString(" · ")
+                if (sub.isNotBlank()) {
+                    Text(
+                        text     = sub,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = CumplrFgMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (!worker.active) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(CumplrSurface2)
+                        .padding(horizontal = Spacing.sm, vertical = 3.dp),
+                ) {
+                    Text("Inactivo", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                }
+            } else {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(CumplrStatusDoneFg))
             }
         }
-        if (!worker.active) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(CumplrSurface2)
-                    .padding(horizontal = Spacing.sm, vertical = 3.dp),
-            ) {
-                Text("Inactivo", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+
+        // Completion score row
+        if (taskCount > 0) {
+            val rateColor = when {
+                approvalRate == null        -> CumplrFgMuted
+                approvalRate >= 0.8f        -> CumplrStatusDoneFg
+                approvalRate >= 0.5f        -> CumplrStatusProgressFg
+                else                        -> CumplrStatusOverdueFg
             }
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(CumplrStatusDoneFg),
-            )
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                LinearProgressIndicator(
+                    progress   = { (approvalRate ?: 0f).coerceIn(0f, 1f) },
+                    modifier   = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color      = rateColor,
+                    trackColor = CumplrSurface2,
+                )
+                Text(
+                    text  = if (approvalRate != null) "${(approvalRate * 100).toInt()}% · $taskCount tareas" else "$taskCount tareas",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = rateColor,
+                )
+            }
         }
     }
 }
