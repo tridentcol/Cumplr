@@ -39,4 +39,8 @@ interface TaskRepository {
         companyId: String,
         assignedBy: String,
     ): Result<Task>
+
+    fun startRealtimeForWorker(userId: String)
+    fun startRealtimeForChief(companyId: String)
+    fun stopRealtime()
 }

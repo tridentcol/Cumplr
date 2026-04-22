@@ -6,16 +6,20 @@ import com.cumplr.core.data.local.dao.TaskDao
 import com.cumplr.core.data.local.entity.NotificationEntity
 import com.cumplr.core.data.local.mapper.toDomain
 import com.cumplr.core.data.local.mapper.toEntity
+import com.cumplr.core.data.remote.SupabaseRealtimeClient
 import com.cumplr.core.data.remote.SupabaseRestClient
 import com.cumplr.core.data.session.SessionManager
 import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.repository.TaskRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -34,9 +38,11 @@ class TaskRepositoryImpl @Inject constructor(
     private val notificationDao: NotificationDao,
     private val restClient: SupabaseRestClient,
     private val sessionManager: SessionManager,
+    private val realtimeClient: SupabaseRealtimeClient,
 ) : TaskRepository {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
+    private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ── Worker queries ────────────────────────────────────────────────────────
 
@@ -311,6 +317,81 @@ class TaskRepositoryImpl @Inject constructor(
                 Result.success(Unit)
             } catch (e: Exception) { Result.failure(e) }
         }
+
+    // ── Realtime ──────────────────────────────────────────────────────────────
+
+    override fun startRealtimeForWorker(userId: String) {
+        repoScope.launch {
+            val session = sessionManager.getSession().first() ?: return@launch
+            realtimeClient.connect(
+                accessToken = session.accessToken,
+                filter      = "assigned_to=eq.$userId",
+                onTask      = { dto -> repoScope.launch { handleRealtimeTask(dto, userId) } },
+            )
+        }
+    }
+
+    override fun startRealtimeForChief(companyId: String) {
+        repoScope.launch {
+            val session = sessionManager.getSession().first() ?: return@launch
+            realtimeClient.connect(
+                accessToken = session.accessToken,
+                filter      = "company_id=eq.$companyId",
+                onTask      = { dto -> repoScope.launch { taskDao.upsertTask(dto.toEntity()) } },
+            )
+        }
+    }
+
+    override fun stopRealtime() = realtimeClient.disconnect()
+
+    private suspend fun handleRealtimeTask(dto: TaskDto, userId: String) {
+        val existing = taskDao.getTaskById(dto.id).first()
+        taskDao.upsertTask(dto.toEntity())
+
+        val now   = Instant.now().toString()
+        val notif = when {
+            existing == null && dto.status == "ASSIGNED" ->
+                NotificationEntity(
+                    id        = UUID.randomUUID().toString(),
+                    userId    = userId,
+                    companyId = dto.companyId,
+                    type      = "TASK_ASSIGNED",
+                    taskId    = dto.id,
+                    title     = "Nueva tarea asignada",
+                    body      = "Se te asignó \"${dto.title}\"",
+                    read      = false,
+                    createdAt = now,
+                )
+            existing != null && existing.status != "APPROVED" && dto.status == "APPROVED" ->
+                NotificationEntity(
+                    id        = UUID.randomUUID().toString(),
+                    userId    = userId,
+                    companyId = dto.companyId,
+                    type      = "TASK_APPROVED",
+                    taskId    = dto.id,
+                    title     = "Tarea aprobada ✓",
+                    body      = "\"${dto.title}\" fue aprobada." +
+                        if (!dto.feedback.isNullOrBlank()) " ${dto.feedback}" else "",
+                    read      = false,
+                    createdAt = now,
+                )
+            existing != null && existing.status != "REJECTED" && dto.status == "REJECTED" ->
+                NotificationEntity(
+                    id        = UUID.randomUUID().toString(),
+                    userId    = userId,
+                    companyId = dto.companyId,
+                    type      = "TASK_REJECTED",
+                    taskId    = dto.id,
+                    title     = "Tarea rechazada",
+                    body      = "\"${dto.title}\" fue rechazada." +
+                        if (!dto.rejectionReason.isNullOrBlank()) " Motivo: ${dto.rejectionReason}" else "",
+                    read      = false,
+                    createdAt = now,
+                )
+            else -> null
+        }
+        notif?.let { notificationDao.upsertNotifications(listOf(it)) }
+    }
 
     override suspend fun updateTask(
         taskId: String,
