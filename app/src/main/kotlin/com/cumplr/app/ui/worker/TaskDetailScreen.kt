@@ -166,6 +166,14 @@ private fun TaskDetailContent(task: Task, onStartTask: () -> Unit) {
             )
         }
 
+        if (task.status == TaskStatus.IN_PROGRESS) {
+            CumplrButton(
+                text     = "Continuar tarea",
+                onClick  = onStartTask,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         if (task.status == TaskStatus.REJECTED) {
             CumplrButton(
                 text     = "Reintentar tarea",

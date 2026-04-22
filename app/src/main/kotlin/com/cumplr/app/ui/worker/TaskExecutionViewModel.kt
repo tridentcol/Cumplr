@@ -8,6 +8,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.data.session.SessionManager
+import com.cumplr.core.data.task.TaskDraftStore
+import com.cumplr.core.data.task.TaskPhotoStore
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.repository.StorageRepository
 import com.cumplr.core.domain.repository.TaskRepository
@@ -19,7 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -31,6 +32,7 @@ import java.util.Locale
 import javax.inject.Inject
 
 sealed class ExecutionUiState {
+    object Loading   : ExecutionUiState()
     object Idle      : ExecutionUiState()
     object Uploading : ExecutionUiState()
     object Success   : ExecutionUiState()
@@ -43,65 +45,144 @@ class TaskExecutionViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
     private val storageRepository: StorageRepository,
     private val sessionManager: SessionManager,
+    private val photoStore: TaskPhotoStore,
+    private val draftStore: TaskDraftStore,
 ) : ViewModel() {
 
     val taskId: String = checkNotNull(savedStateHandle["taskId"])
 
-    private val _step           = MutableStateFlow(1)
-    val step: StateFlow<Int>    = _step.asStateFlow()
+    private val _step = MutableStateFlow(1)
+    val step: StateFlow<Int> = _step.asStateFlow()
 
-    private val _elapsedSeconds       = MutableStateFlow(0L)
+    private val _elapsedSeconds = MutableStateFlow(0L)
     val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
 
-    private val _observations           = MutableStateFlow("")
+    private val _observations = MutableStateFlow("")
     val observations: StateFlow<String> = _observations.asStateFlow()
 
+    // Confirmed photos (persisted to disk)
     private val _startPhotoBytes = MutableStateFlow<ByteArray?>(null)
     val startPhotoBytes: StateFlow<ByteArray?> = _startPhotoBytes.asStateFlow()
 
     private val _endPhotoBytes = MutableStateFlow<ByteArray?>(null)
     val endPhotoBytes: StateFlow<ByteArray?> = _endPhotoBytes.asStateFlow()
 
-    private val _uiState              = MutableStateFlow<ExecutionUiState>(ExecutionUiState.Idle)
+    // Pending confirmation (in-memory only, shown in confirm screen)
+    private val _startPendingBytes = MutableStateFlow<ByteArray?>(null)
+    val startPendingBytes: StateFlow<ByteArray?> = _startPendingBytes.asStateFlow()
+
+    private val _endPendingBytes = MutableStateFlow<ByteArray?>(null)
+    val endPendingBytes: StateFlow<ByteArray?> = _endPendingBytes.asStateFlow()
+
+    private val _isRestored = MutableStateFlow(false)
+    val isRestored: StateFlow<Boolean> = _isRestored.asStateFlow()
+
+    private val _uiState = MutableStateFlow<ExecutionUiState>(ExecutionUiState.Loading)
     val uiState: StateFlow<ExecutionUiState> = _uiState.asStateFlow()
 
     private var capturedStartTime: Instant? = null
     private var timerJob: Job? = null
 
     init {
-        // Recover timer if task was already started before this ViewModel was created
         viewModelScope.launch {
             val task = taskRepository.getTask(taskId).filterNotNull().first()
-            if (task.status == TaskStatus.IN_PROGRESS && task.startTime != null) {
-                val recovered = runCatching { Instant.parse(task.startTime) }.getOrNull()
-                if (recovered != null) {
-                    capturedStartTime = recovered
-                    _step.value = 2
-                    startTimerFrom(recovered)
+
+            if (task.status == TaskStatus.IN_PROGRESS) {
+                val startBytes = photoStore.load(taskId, "start")
+                val endBytes   = photoStore.load(taskId, "end")
+                val savedObs   = draftStore.loadObservations(taskId)
+
+                if (startBytes != null) _startPhotoBytes.value = startBytes
+                if (endBytes   != null) _endPhotoBytes.value   = endBytes
+                if (savedObs.isNotBlank()) _observations.value = savedObs
+
+                val startInstant = task.startTime
+                    ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                if (startInstant != null) {
+                    capturedStartTime = startInstant
+                    startTimerFrom(startInstant)
+                }
+
+                _step.value = when {
+                    endBytes   != null       -> 4
+                    savedObs.isNotBlank()    -> 3
+                    startBytes != null       -> 2
+                    else                     -> 1
+                }
+
+                if (startBytes != null || endBytes != null || savedObs.isNotBlank()) {
+                    _isRestored.value = true
                 }
             }
+
+            _uiState.value = ExecutionUiState.Idle
         }
     }
 
+    // ── Start photo ───────────────────────────────────────────────────────────
+
     fun onStartPhotoTaken(rawBytes: ByteArray) {
-        val now = Instant.now()
-        capturedStartTime = now
-        _startPhotoBytes.value = rawBytes.withTimestamp()
-        _step.value = 2
-        startTimerFrom(now)
-        // Persist start time immediately so it survives app kill / phone reboot
-        viewModelScope.launch { taskRepository.markTaskStarted(taskId, now.toString()) }
+        _startPendingBytes.value = rawBytes.withTimestamp()
     }
+
+    fun confirmStartPhoto() {
+        val bytes = _startPendingBytes.value ?: return
+        _startPendingBytes.value = null
+        _startPhotoBytes.value = bytes
+        photoStore.save(taskId, "start", bytes)
+
+        if (capturedStartTime == null) {
+            val now = Instant.now()
+            capturedStartTime = now
+            startTimerFrom(now)
+            viewModelScope.launch { taskRepository.markTaskStarted(taskId, now.toString()) }
+        }
+        _step.value = 2
+    }
+
+    fun retakeStartPhoto() {
+        _startPendingBytes.value = null
+    }
+
+    fun retakeStartPhotoFromTimer() {
+        _startPhotoBytes.value = null
+        photoStore.delete(taskId, "start")
+        _step.value = 1
+    }
+
+    // ── Navigation ────────────────────────────────────────────────────────────
 
     fun goToStep3() { _step.value = 3 }
 
     fun goToStep4() { _step.value = 4 }
 
-    fun setObservations(text: String) { _observations.value = text }
+    // ── Observations ──────────────────────────────────────────────────────────
+
+    fun setObservations(text: String) {
+        _observations.value = text
+        viewModelScope.launch { draftStore.saveObservations(taskId, text) }
+    }
+
+    // ── End photo ─────────────────────────────────────────────────────────────
 
     fun onEndPhotoTaken(rawBytes: ByteArray) {
-        _endPhotoBytes.value = rawBytes.withTimestamp()
+        _endPendingBytes.value = rawBytes.withTimestamp()
     }
+
+    fun confirmEndPhoto() {
+        val bytes = _endPendingBytes.value ?: return
+        _endPendingBytes.value = null
+        _endPhotoBytes.value = bytes
+        photoStore.save(taskId, "end", bytes)
+    }
+
+    fun retakeEndPhoto() {
+        _endPendingBytes.value = null
+        _endPhotoBytes.value = null
+        photoStore.delete(taskId, "end")
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────────────
 
     fun clearError() {
         if (_uiState.value is ExecutionUiState.Error) _uiState.value = ExecutionUiState.Idle
@@ -111,8 +192,10 @@ class TaskExecutionViewModel @Inject constructor(
         val startBytes = _startPhotoBytes.value ?: return
         val endBytes   = _endPhotoBytes.value   ?: return
         val startTime  = capturedStartTime?.toString() ?: Instant.now().toString()
+
         viewModelScope.launch {
             _uiState.value = ExecutionUiState.Uploading
+
             val session = sessionManager.getSession().first()
             if (session == null) {
                 _uiState.value = ExecutionUiState.Error("Sin sesión activa")
@@ -152,12 +235,20 @@ class TaskExecutionViewModel @Inject constructor(
                 photoEndUrl  = endResult.getOrThrow(),
                 observations = _observations.value.trim().takeIf { it.isNotBlank() },
             )
+
+            if (submitResult.isSuccess) {
+                draftStore.clearDraft(taskId)
+                photoStore.clear(taskId)
+            }
+
             _uiState.value = submitResult.fold(
                 onSuccess = { ExecutionUiState.Success },
                 onFailure = { ExecutionUiState.Error(it.message ?: "Error al enviar tarea") },
             )
         }
     }
+
+    // ── Timer ─────────────────────────────────────────────────────────────────
 
     private fun startTimerFrom(startTime: Instant) {
         timerJob?.cancel()
@@ -173,6 +264,8 @@ class TaskExecutionViewModel @Inject constructor(
         timerJob?.cancel()
         super.onCleared()
     }
+
+    // ── Utils ─────────────────────────────────────────────────────────────────
 
     private fun ByteArray.withTimestamp(): ByteArray = try {
         val bitmap = BitmapFactory.decodeByteArray(this, 0, size)
