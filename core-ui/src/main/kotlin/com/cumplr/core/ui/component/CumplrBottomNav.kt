@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,13 +26,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.cumplr.core.ui.theme.CumplrAccent
+import com.cumplr.core.ui.theme.CumplrAccentInk
 import com.cumplr.core.ui.theme.CumplrFgMuted
 import com.cumplr.core.ui.theme.CumplrSurface
+import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 
 data class CumplrNavItem(
     val key: String,
     val icon: ImageVector,
     val label: String,
+    val badgeCount: Int = 0,
 )
 
 @Composable
@@ -79,12 +84,33 @@ private fun NavItemCell(item: CumplrNavItem, selected: Boolean, onSelect: () -> 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Icon(
-            imageVector        = item.icon,
-            contentDescription = item.label,
-            tint               = tint,
-            modifier           = Modifier.size(22.dp),
-        )
+        Box {
+            Icon(
+                imageVector        = item.icon,
+                contentDescription = item.label,
+                tint               = tint,
+                modifier           = Modifier.size(22.dp),
+            )
+            if (item.badgeCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = 10.dp, y = (-3).dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(CumplrStatusOverdueFg)
+                        .align(Alignment.TopEnd),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text  = if (item.badgeCount > 99) "99+" else "${item.badgeCount}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp)
+                        ),
+                        color = CumplrAccentInk,
+                    )
+                }
+            }
+        }
         Text(
             text  = item.label,
             color = tint,

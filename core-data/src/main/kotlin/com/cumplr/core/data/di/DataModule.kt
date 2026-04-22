@@ -5,10 +5,12 @@ import androidx.room.Room
 import com.cumplr.core.data.local.CumplrDatabase
 import com.cumplr.core.data.local.MIGRATION_1_2
 import com.cumplr.core.data.repository.AuthRepositoryImpl
+import com.cumplr.core.data.repository.NotificationRepositoryImpl
 import com.cumplr.core.data.repository.StorageRepositoryImpl
 import com.cumplr.core.data.repository.TaskRepositoryImpl
 import com.cumplr.core.data.repository.UserRepositoryImpl
 import com.cumplr.core.domain.repository.AuthRepository
+import com.cumplr.core.domain.repository.NotificationRepository
 import com.cumplr.core.domain.repository.StorageRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
@@ -26,6 +28,9 @@ abstract class DataModule {
 
     @Binds @Singleton
     abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds @Singleton
+    abstract fun bindNotificationRepository(impl: NotificationRepositoryImpl): NotificationRepository
 
     @Binds @Singleton
     abstract fun bindTaskRepository(impl: TaskRepositoryImpl): TaskRepository

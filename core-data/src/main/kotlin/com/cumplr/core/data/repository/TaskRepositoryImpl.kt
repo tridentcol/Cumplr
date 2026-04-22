@@ -1,7 +1,9 @@
 package com.cumplr.core.data.repository
 
 import android.util.Log
+import com.cumplr.core.data.local.dao.NotificationDao
 import com.cumplr.core.data.local.dao.TaskDao
+import com.cumplr.core.data.local.entity.NotificationEntity
 import com.cumplr.core.data.local.mapper.toDomain
 import com.cumplr.core.data.local.mapper.toEntity
 import com.cumplr.core.data.remote.SupabaseRestClient
@@ -29,6 +31,7 @@ private const val TAG = "TaskRepo"
 @Singleton
 class TaskRepositoryImpl @Inject constructor(
     private val taskDao: TaskDao,
+    private val notificationDao: NotificationDao,
     private val restClient: SupabaseRestClient,
     private val sessionManager: SessionManager,
 ) : TaskRepository {
@@ -149,6 +152,23 @@ class TaskRepositoryImpl @Inject constructor(
             try {
                 val now = Instant.now().toString()
                 taskDao.updateApproval(taskId, TaskStatus.APPROVED.name, feedback, now, 0)
+                val task = taskDao.getTaskById(taskId).first()
+                if (task != null) {
+                    notificationDao.upsertNotifications(listOf(
+                        NotificationEntity(
+                            id        = UUID.randomUUID().toString(),
+                            userId    = task.assignedTo,
+                            companyId = task.companyId,
+                            type      = "TASK_APPROVED",
+                            taskId    = taskId,
+                            title     = "Tarea aprobada",
+                            body      = "\"${task.title}\" fue aprobada." +
+                                if (!feedback.isNullOrBlank()) " Feedback: $feedback" else "",
+                            read      = false,
+                            createdAt = now,
+                        )
+                    ))
+                }
                 try {
                     val session = sessionManager.getSession().first()
                     if (session?.accessToken?.isNotBlank() == true) {
@@ -168,6 +188,22 @@ class TaskRepositoryImpl @Inject constructor(
             try {
                 val now = Instant.now().toString()
                 taskDao.updateRejection(taskId, TaskStatus.REJECTED.name, rejectionReason, now, 0)
+                val task = taskDao.getTaskById(taskId).first()
+                if (task != null) {
+                    notificationDao.upsertNotifications(listOf(
+                        NotificationEntity(
+                            id        = UUID.randomUUID().toString(),
+                            userId    = task.assignedTo,
+                            companyId = task.companyId,
+                            type      = "TASK_REJECTED",
+                            taskId    = taskId,
+                            title     = "Tarea rechazada",
+                            body      = "\"${task.title}\" fue rechazada. Motivo: $rejectionReason",
+                            read      = false,
+                            createdAt = now,
+                        )
+                    ))
+                }
                 try {
                     val session = sessionManager.getSession().first()
                     if (session?.accessToken?.isNotBlank() == true) {

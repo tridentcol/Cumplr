@@ -2,6 +2,7 @@ package com.cumplr.app.ui.chief
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.model.User
 import com.cumplr.core.domain.repository.AuthRepository
@@ -68,6 +69,10 @@ class ChiefHomeViewModel @Inject constructor(
 
     val activeWorkersCount: StateFlow<Int> = workers
         .map { list -> list.count { it.active } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val pendingReviewCount: StateFlow<Int> = tasks
+        .map { list -> list.count { it.status == TaskStatus.SUBMITTED || it.status == TaskStatus.UNDER_REVIEW } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init {
