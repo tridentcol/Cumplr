@@ -14,6 +14,7 @@ import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.repository.StorageRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,7 +130,9 @@ class TaskExecutionViewModel @Inject constructor(
     // ── Start photo ───────────────────────────────────────────────────────────
 
     fun onStartPhotoTaken(rawBytes: ByteArray) {
-        _startPendingBytes.value = rawBytes.withTimestamp()
+        viewModelScope.launch(Dispatchers.IO) {
+            _startPendingBytes.value = rawBytes.withTimestamp()
+        }
     }
 
     fun confirmStartPhoto() {
@@ -173,7 +176,9 @@ class TaskExecutionViewModel @Inject constructor(
     // ── End photo ─────────────────────────────────────────────────────────────
 
     fun onEndPhotoTaken(rawBytes: ByteArray) {
-        _endPendingBytes.value = rawBytes.withTimestamp()
+        viewModelScope.launch(Dispatchers.IO) {
+            _endPendingBytes.value = rawBytes.withTimestamp()
+        }
     }
 
     fun confirmEndPhoto() {
