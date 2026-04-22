@@ -8,6 +8,7 @@ import com.cumplr.core.data.local.mapper.toDomain
 import com.cumplr.core.data.local.mapper.toEntity
 import com.cumplr.core.data.remote.SupabaseRealtimeClient
 import com.cumplr.core.data.remote.SupabaseRestClient
+import com.cumplr.core.data.remote.dto.TaskDto
 import com.cumplr.core.data.session.SessionManager
 import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
