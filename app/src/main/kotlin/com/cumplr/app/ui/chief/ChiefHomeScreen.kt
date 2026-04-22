@@ -2,6 +2,7 @@ package com.cumplr.app.ui.chief
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -22,12 +24,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -56,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.User
 import com.cumplr.core.ui.component.CumplrBottomNav
@@ -86,10 +92,10 @@ private val CHIEF_TASK_TABS = listOf(
 )
 
 private val CHIEF_NAV_ITEMS = listOf(
-    CumplrNavItem("inicio",   Icons.Outlined.Home,         "Inicio"),
-    CumplrNavItem("equipo",   Icons.Outlined.Group,        "Equipo"),
-    CumplrNavItem("tareas",   Icons.Outlined.CheckCircle,  "Tareas"),
-    CumplrNavItem("reportes", Icons.Outlined.BarChart,     "Reportes"),
+    CumplrNavItem("inicio",   Icons.Outlined.Home,        "Inicio"),
+    CumplrNavItem("equipo",   Icons.Outlined.Group,       "Equipo"),
+    CumplrNavItem("tareas",   Icons.Outlined.CheckCircle, "Tareas"),
+    CumplrNavItem("perfil",   Icons.Outlined.Person,      "Perfil"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +104,7 @@ fun ChiefHomeScreen(
     onLogout: () -> Unit,
     onTaskReview: (String) -> Unit,
     onTaskEdit: (String) -> Unit,
+    onTaskSummary: (String) -> Unit,
     onAssignTask: () -> Unit,
     viewModel: ChiefHomeViewModel = hiltViewModel(),
 ) {
@@ -110,10 +117,16 @@ fun ChiefHomeScreen(
     val activeWorkersCount by viewModel.activeWorkersCount.collectAsStateWithLifecycle()
     val chiefName          by viewModel.chiefName.collectAsStateWithLifecycle()
     val workers            by viewModel.workers.collectAsStateWithLifecycle()
+    val pendingReviewCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
 
     LaunchedEffect(didLogOut) { if (didLogOut) onLogout() }
 
     var selectedNav by remember { mutableStateOf("inicio") }
+
+    val navItems = CHIEF_NAV_ITEMS.map { item ->
+        if (item.key == "tareas" && pendingReviewCount > 0) item.copy(badgeCount = pendingReviewCount)
+        else item
+    }
 
     Scaffold(
         modifier       = Modifier.fillMaxSize().statusBarsPadding(),
@@ -121,7 +134,7 @@ fun ChiefHomeScreen(
         bottomBar = {
             Surface(shadowElevation = 4.dp, color = CumplrSurface) {
                 CumplrBottomNav(
-                    items          = CHIEF_NAV_ITEMS,
+                    items          = navItems,
                     selectedKey    = selectedNav,
                     onItemSelected = { selectedNav = it },
                 )
@@ -141,6 +154,8 @@ fun ChiefHomeScreen(
                     completionRate     = completionRate,
                     overdueCount       = overdueCount,
                     workers            = workers,
+                    pendingReviewCount = pendingReviewCount,
+                    onGoToTareas       = { selectedNav = "tareas" },
                 )
                 "equipo" -> ChiefEquipoTab(workers = workers)
                 "tareas" -> ChiefTareasTab(
@@ -149,15 +164,13 @@ fun ChiefHomeScreen(
                     onRefresh        = { viewModel.refresh() },
                     onTaskReview     = onTaskReview,
                     onTaskEdit       = onTaskEdit,
+                    onTaskSummary    = onTaskSummary,
                     onAssignTask     = onAssignTask,
                 )
-                "reportes" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    EmptyState(
-                        icon     = Icons.Outlined.BarChart,
-                        title    = "Reportes",
-                        subtitle = "Próximamente podrás ver métricas detalladas aquí.",
-                    )
-                }
+                "perfil" -> ChiefPerfilTab(
+                    name     = chiefName,
+                    onLogout = { viewModel.signOut() },
+                )
             }
         }
     }
@@ -173,6 +186,8 @@ private fun ChiefInicioTab(
     completionRate: Float,
     overdueCount: Int,
     workers: List<User>,
+    pendingReviewCount: Int,
+    onGoToTareas: () -> Unit,
 ) {
     val hour = LocalTime.now().hour
     val salutation = when {
@@ -278,7 +293,7 @@ private fun ChiefInicioTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.lg)
-                    .padding(bottom = Spacing.md)
+                    .padding(bottom = Spacing.sm)
                     .clip(RoundedCornerShape(12.dp))
                     .background(CumplrStatusOverdueBg)
                     .padding(Spacing.md),
@@ -290,6 +305,30 @@ private fun ChiefInicioTab(
                     text  = "$overdueCount ${if (overdueCount == 1) "tarea vencida" else "tareas vencidas"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = CumplrStatusOverdueFg,
+                )
+            }
+        }
+
+        // Pending review banner
+        if (pendingReviewCount > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.md)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CumplrAccent.copy(alpha = 0.10f))
+                    .clickable(onClick = onGoToTareas)
+                    .padding(Spacing.md),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Icon(Icons.Outlined.CheckCircle, null, tint = CumplrAccent, modifier = Modifier.size(18.dp))
+                Text(
+                    text     = "$pendingReviewCount ${if (pendingReviewCount == 1) "tarea por revisar" else "tareas por revisar"}",
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = CumplrAccent,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -440,6 +479,7 @@ private fun ChiefTareasTab(
     onRefresh: () -> Unit,
     onTaskReview: (String) -> Unit,
     onTaskEdit: (String) -> Unit,
+    onTaskSummary: (String) -> Unit,
     onAssignTask: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -529,7 +569,8 @@ private fun ChiefTareasTab(
                                 onClick      = {
                                     when (tw.task.status) {
                                         TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
-                                        else -> onTaskEdit(tw.task.id)
+                                        TaskStatus.APPROVED, TaskStatus.REJECTED       -> onTaskSummary(tw.task.id)
+                                        else                                            -> onTaskEdit(tw.task.id)
                                     }
                                 },
                             )
@@ -548,6 +589,62 @@ private fun ChiefTareasTab(
                 icon           = { Icon(Icons.Outlined.Add, "Asignar tarea") },
                 text           = { Text("Asignar", style = MaterialTheme.typography.labelLarge) },
             )
+        }
+    }
+}
+
+// ── Perfil tab ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChiefPerfilTab(name: String, onLogout: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Spacing.lg),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(48.dp))
+
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(CumplrAccent.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text  = name.firstOrNull()?.uppercase() ?: "?",
+                style = MaterialTheme.typography.headlineMedium,
+                color = CumplrAccent,
+            )
+        }
+
+        Spacer(Modifier.height(Spacing.md))
+
+        Text(
+            text  = name,
+            style = MaterialTheme.typography.titleLarge,
+            color = CumplrFg,
+        )
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        Button(
+            onClick  = onLogout,
+            modifier = Modifier.fillMaxWidth(),
+            colors   = ButtonDefaults.buttonColors(
+                containerColor = CumplrSurface,
+                contentColor   = CumplrStatusOverdueFg,
+            ),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Icon(
+                imageVector        = Icons.AutoMirrored.Outlined.ExitToApp,
+                contentDescription = "Salir",
+                modifier           = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            Text("Cerrar sesión", style = MaterialTheme.typography.labelLarge)
         }
     }
 }

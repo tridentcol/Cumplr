@@ -2,8 +2,10 @@ package com.cumplr.app.ui.worker
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cumplr.core.domain.model.AppNotification
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.repository.AuthRepository
+import com.cumplr.core.domain.repository.NotificationRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +24,7 @@ import javax.inject.Inject
 class WorkerHomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val taskRepository: TaskRepository,
+    private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
 
     private val _didLogOut    = MutableStateFlow(false)
@@ -44,6 +47,20 @@ class WorkerHomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val notifications: StateFlow<List<AppNotification>> = authRepository.getCurrentSession()
+        .flatMapLatest { session ->
+            if (session != null) notificationRepository.getNotifications(session.userId)
+            else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val unreadCount: StateFlow<Int> = authRepository.getCurrentSession()
+        .flatMapLatest { session ->
+            if (session != null) notificationRepository.getUnreadCount(session.userId)
+            else flowOf(0)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     init {
         viewModelScope.launch {
             val session = authRepository.getCurrentSession().first()
@@ -58,6 +75,17 @@ class WorkerHomeViewModel @Inject constructor(
             val session = authRepository.getCurrentSession().first()
             if (session != null) taskRepository.refresh(session.userId)
             _isRefreshing.value = false
+        }
+    }
+
+    fun markNotificationRead(id: String) {
+        viewModelScope.launch { notificationRepository.markAsRead(id) }
+    }
+
+    fun markAllNotificationsRead() {
+        viewModelScope.launch {
+            val session = authRepository.getCurrentSession().first() ?: return@launch
+            notificationRepository.markAllRead(session.userId)
         }
     }
 

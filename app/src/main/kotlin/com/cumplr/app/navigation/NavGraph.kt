@@ -14,6 +14,7 @@ import com.cumplr.app.ui.chief.TaskEditScreen
 import com.cumplr.app.ui.chief.TaskReviewScreen
 import com.cumplr.app.ui.chief.TeamScreen
 import com.cumplr.app.ui.splash.SplashScreen
+import com.cumplr.app.ui.task.TaskSummaryScreen
 import com.cumplr.app.ui.worker.TaskDetailScreen
 import com.cumplr.app.ui.worker.TaskExecutionScreen
 import com.cumplr.app.ui.worker.WorkerHomeScreen
@@ -29,6 +30,7 @@ sealed class CumplrRoute(val route: String) {
     object TaskExecution : CumplrRoute("task_execution/{taskId}")
     object TaskReview    : CumplrRoute("task_review/{taskId}")
     object TaskEdit      : CumplrRoute("task_edit/{taskId}")
+    object TaskSummary   : CumplrRoute("task_summary/{taskId}")
     object ChiefTeam     : CumplrRoute("chief_team")
     object TaskCreate    : CumplrRoute("task_create")
 }
@@ -80,6 +82,9 @@ fun CumplrNavGraph(navController: NavHostController) {
                 onTaskClick = { taskId ->
                     navController.navigate("task_detail/$taskId")
                 },
+                onHistoryTaskClick = { taskId ->
+                    navController.navigate("task_summary/$taskId")
+                },
             )
         }
 
@@ -116,9 +121,10 @@ fun CumplrNavGraph(navController: NavHostController) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                onTaskReview = { taskId -> navController.navigate("task_review/$taskId") },
-                onTaskEdit   = { taskId -> navController.navigate("task_edit/$taskId") },
-                onAssignTask = { navController.navigate(CumplrRoute.TaskCreate.route) },
+                onTaskReview  = { taskId -> navController.navigate("task_review/$taskId") },
+                onTaskEdit    = { taskId -> navController.navigate("task_edit/$taskId") },
+                onTaskSummary = { taskId -> navController.navigate("task_summary/$taskId") },
+                onAssignTask  = { navController.navigate(CumplrRoute.TaskCreate.route) },
             )
         }
 
@@ -150,6 +156,15 @@ fun CumplrNavGraph(navController: NavHostController) {
                         popUpTo(CumplrRoute.ChiefHome.route) { inclusive = true }
                     }
                 },
+            )
+        }
+
+        composable(
+            route     = CumplrRoute.TaskSummary.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) {
+            TaskSummaryScreen(
+                onBack = { navController.popBackStack() },
             )
         }
 

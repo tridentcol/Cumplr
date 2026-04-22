@@ -18,6 +18,9 @@ interface NotificationDao {
     @Query("UPDATE notifications SET read = 1 WHERE id = :notificationId")
     suspend fun markAsRead(notificationId: String)
 
+    @Query("UPDATE notifications SET read = 1 WHERE user_id = :userId")
+    suspend fun markAllRead(userId: String)
+
     @Query("SELECT * FROM notifications WHERE user_id = :userId ORDER BY created_at DESC")
     fun getByUser(userId: String): Flow<List<NotificationEntity>>
 }
