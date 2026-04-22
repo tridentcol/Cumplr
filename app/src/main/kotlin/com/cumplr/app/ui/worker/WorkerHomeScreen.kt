@@ -204,34 +204,25 @@ private fun WorkerInicioTab(
     onTaskClick: (String) -> Unit,
     onHistoryTaskClick: (String) -> Unit,
 ) {
-    val hour = java.time.LocalTime.now().hour
-    val salutation = when {
-        hour < 12 -> "Buenos días"
-        hour < 18 -> "Buenas tardes"
-        else      -> "Buenas noches"
-    }
-    val firstName = userName.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: userName
-
-    val assigned    = tasks.count { it.status == TaskStatus.ASSIGNED }
-    val inProgress  = tasks.count { it.status == TaskStatus.IN_PROGRESS }
-    val completed   = tasks.count { it.status == TaskStatus.APPROVED }
-    val inProgressTask = tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS }
-
-    // Running timer for in-progress task
-    var elapsedSeconds by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(inProgressTask?.id) {
-        while (isActive) {
-            val start = inProgressTask?.startTime
-                ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            elapsedSeconds = if (start != null) Duration.between(start, Instant.now()).seconds else 0L
-            delay(1_000)
+    val hour       = remember { java.time.LocalTime.now().hour }
+    val salutation = remember(hour) {
+        when {
+            hour < 12 -> "Buenos días"
+            hour < 18 -> "Buenas tardes"
+            else      -> "Buenas noches"
         }
     }
-
-    val upcoming = tasks
-        .filter { it.status == TaskStatus.ASSIGNED }
-        .sortedWith(compareBy(nullsLast()) { it.deadline })
-        .take(3)
+    val firstName      = remember(userName) { userName.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: userName }
+    val assigned       = remember(tasks) { tasks.count { it.status == TaskStatus.ASSIGNED } }
+    val inProgress     = remember(tasks) { tasks.count { it.status == TaskStatus.IN_PROGRESS } }
+    val completed      = remember(tasks) { tasks.count { it.status == TaskStatus.APPROVED } }
+    val inProgressTask = remember(tasks) { tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS } }
+    val upcoming       = remember(tasks) {
+        tasks
+            .filter { it.status == TaskStatus.ASSIGNED }
+            .sortedWith(compareBy(nullsLast()) { it.deadline })
+            .take(3)
+    }
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -269,10 +260,9 @@ private fun WorkerInicioTab(
             // In-progress widget
             if (inProgressTask != null) {
                 InProgressWidget(
-                    task           = inProgressTask,
-                    elapsedSeconds = elapsedSeconds,
-                    onClick        = { onTaskClick(inProgressTask.id) },
-                    modifier       = Modifier
+                    task    = inProgressTask,
+                    onClick = { onTaskClick(inProgressTask.id) },
+                    modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Spacing.lg)
                         .padding(bottom = Spacing.md),
@@ -313,10 +303,17 @@ private fun WorkerInicioTab(
 @Composable
 private fun InProgressWidget(
     task: Task,
-    elapsedSeconds: Long,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var elapsedSeconds by remember(task.id) { mutableLongStateOf(0L) }
+    LaunchedEffect(task.id) {
+        val start = task.startTime?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        while (isActive) {
+            elapsedSeconds = if (start != null) Duration.between(start, Instant.now()).seconds else 0L
+            delay(1_000)
+        }
+    }
     val h = elapsedSeconds / 3600
     val m = (elapsedSeconds % 3600) / 60
     val s = elapsedSeconds % 60
