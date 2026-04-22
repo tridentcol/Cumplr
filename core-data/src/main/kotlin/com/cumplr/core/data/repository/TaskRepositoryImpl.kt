@@ -50,9 +50,66 @@ class TaskRepositoryImpl @Inject constructor(
         try {
             val session = sessionManager.getSession().first()
                 ?: return@withContext Result.failure(Exception("Sin sesión activa"))
+
+            // Snapshot current DB state to detect transitions
+            val existing = taskDao.getTasksByAssignedTo(userId).first().associateBy { it.id }
+
             val dtos = restClient.getTasks(session.accessToken, userId)
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refresh OK — ${dtos.size} tasks")
+
+            // Generate local notifications for status transitions detected from the server
+            val now = Instant.now().toString()
+            val newNotifs = dtos.mapNotNull { dto ->
+                val old = existing[dto.id]
+                when {
+                    old == null && existing.isNotEmpty() ->
+                        // Brand-new task assigned while the app was running (skip on first-ever load)
+                        NotificationEntity(
+                            id        = UUID.randomUUID().toString(),
+                            userId    = userId,
+                            companyId = dto.companyId,
+                            type      = "TASK_ASSIGNED",
+                            taskId    = dto.id,
+                            title     = "Nueva tarea asignada",
+                            body      = "Se te asignó \"${dto.title}\"",
+                            read      = false,
+                            createdAt = now,
+                        )
+                    old != null && old.status != "APPROVED" && dto.status == "APPROVED" ->
+                        NotificationEntity(
+                            id        = UUID.randomUUID().toString(),
+                            userId    = userId,
+                            companyId = dto.companyId,
+                            type      = "TASK_APPROVED",
+                            taskId    = dto.id,
+                            title     = "Tarea aprobada ✓",
+                            body      = "\"${dto.title}\" fue aprobada." +
+                                if (!dto.feedback.isNullOrBlank()) " ${dto.feedback}" else "",
+                            read      = false,
+                            createdAt = now,
+                        )
+                    old != null && old.status != "REJECTED" && dto.status == "REJECTED" ->
+                        NotificationEntity(
+                            id        = UUID.randomUUID().toString(),
+                            userId    = userId,
+                            companyId = dto.companyId,
+                            type      = "TASK_REJECTED",
+                            taskId    = dto.id,
+                            title     = "Tarea rechazada",
+                            body      = "\"${dto.title}\" fue rechazada." +
+                                if (!dto.rejectionReason.isNullOrBlank()) " Motivo: ${dto.rejectionReason}" else "",
+                            read      = false,
+                            createdAt = now,
+                        )
+                    else -> null
+                }
+            }
+            if (newNotifs.isNotEmpty()) {
+                notificationDao.upsertNotifications(newNotifs)
+                Log.d(TAG, "refresh — generated ${newNotifs.size} notifications")
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.w(TAG, "refresh failed: ${e.message}")

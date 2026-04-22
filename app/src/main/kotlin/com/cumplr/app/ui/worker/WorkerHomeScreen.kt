@@ -93,8 +93,8 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-private val ACTIVE_STATUSES  = setOf(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
-private val HISTORY_STATUSES = setOf(TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW, TaskStatus.APPROVED, TaskStatus.REJECTED)
+private val ACTIVE_STATUSES  = setOf(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.REJECTED)
+private val HISTORY_STATUSES = setOf(TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW, TaskStatus.APPROVED)
 
 private data class TabDef(val label: String, val filter: (Task) -> Boolean)
 

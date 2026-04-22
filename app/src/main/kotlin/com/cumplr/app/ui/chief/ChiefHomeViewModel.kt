@@ -9,6 +9,8 @@ import com.cumplr.core.domain.repository.AuthRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,8 +21,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val POLL_INTERVAL_MS = 30_000L
 
 data class TaskWithWorker(val task: Task, val worker: User?)
 
@@ -75,11 +80,26 @@ class ChiefHomeViewModel @Inject constructor(
         .map { list -> list.count { it.status == TaskStatus.SUBMITTED || it.status == TaskStatus.UNDER_REVIEW } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    private var pollingJob: Job? = null
+
     init {
         viewModelScope.launch {
             val s = authRepository.getCurrentSession().first { it != null } ?: return@launch
             taskRepository.refreshCompanyTasks(s.companyId)
             userRepository.refreshCompanyUsers(s.companyId)
+        }
+        startPolling()
+    }
+
+    private fun startPolling() {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(POLL_INTERVAL_MS)
+                val s = session.value ?: continue
+                taskRepository.refreshCompanyTasks(s.companyId)
+                userRepository.refreshCompanyUsers(s.companyId)
+            }
         }
     }
 
