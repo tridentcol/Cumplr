@@ -35,13 +35,14 @@ class StorageRepositoryImpl @Inject constructor(
 
             val url = try {
                 restClient.uploadFile(session.accessToken, BUCKET, path, compressed)
-            } catch (e: Exception) {
-                if (isAuthError(e) && session.refreshToken.isNotBlank()) {
-                    val (newAccessToken, newRefreshToken) = restClient.refreshToken(session.refreshToken)
-                    sessionManager.updateTokens(newAccessToken, newRefreshToken)
-                    restClient.uploadFile(newAccessToken, BUCKET, path, compressed)
+            } catch (initial: Exception) {
+                val canRefresh = isAuthError(initial) && !isRlsError(initial) && session.refreshToken.isNotBlank()
+                if (canRefresh) {
+                    val (newToken, newRefresh) = restClient.refreshToken(session.refreshToken)
+                    sessionManager.updateTokens(newToken, newRefresh)
+                    restClient.uploadFile(newToken, BUCKET, path, compressed)
                 } else {
-                    throw e
+                    throw mapUploadError(initial)
                 }
             }
 
@@ -55,6 +56,19 @@ class StorageRepositoryImpl @Inject constructor(
         val msg = e.message ?: ""
         return msg.contains("HTTP 401") || msg.contains("HTTP 403") ||
             msg.contains("Unauthorized") || msg.contains("exp")
+    }
+
+    private fun isRlsError(e: Exception): Boolean {
+        val msg = e.message ?: ""
+        return msg.contains("row-level security") || msg.contains("violates row")
+    }
+
+    private fun mapUploadError(e: Exception): Exception = when {
+        isRlsError(e) -> Exception("Sin permisos para subir fotos. Contacta al administrador.")
+        isAuthError(e) -> Exception("Sesión expirada. Vuelve a iniciar sesión para continuar.")
+        (e.message ?: "").let { it.contains("Unable to resolve") || it.contains("timeout", ignoreCase = true) } ->
+            Exception("Sin conexión. Verifica tu internet e intenta de nuevo.")
+        else -> e
     }
 
     private fun ByteArray.compressToMaxSide(maxSide: Int = 800, quality: Int = 80): ByteArray {
