@@ -130,8 +130,11 @@ fun ChiefHomeScreen(
     }
 
     Scaffold(
-        modifier       = Modifier.fillMaxSize().statusBarsPadding(),
-        containerColor = CumplrBackground,
+        modifier             = Modifier.fillMaxSize().statusBarsPadding(),
+        containerColor       = CumplrBackground,
+        // CumplrBottomNav handles navigationBars insets internally via windowInsetsBottomHeight,
+        // so we clear them here to prevent Scaffold from adding a duplicate bottom offset.
+        contentWindowInsets  = androidx.compose.foundation.layout.WindowInsets(0),
         bottomBar = {
             Surface(shadowElevation = 4.dp, color = CumplrSurface) {
                 CumplrBottomNav(

@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.cumplr.core.ui.component.CumplrAppBar
 import com.cumplr.core.ui.component.CumplrButton
 import com.cumplr.core.ui.component.CumplrButtonVariant
@@ -260,7 +264,9 @@ private fun CameraStep(
     val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor       = remember { ContextCompat.getMainExecutor(context) }
+    val scope          = rememberCoroutineScope()
     var imageCapture   by remember { mutableStateOf<ImageCapture?>(null) }
+    var isTakingPhoto  by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -278,41 +284,74 @@ private fun CameraStep(
             ) {
                 AndroidView(
                     factory = { ctx ->
-                        PreviewView(ctx).also { pv ->
-                            ProcessCameraProvider.getInstance(ctx).addListener({
-                                val provider = ProcessCameraProvider.getInstance(ctx).get()
+                        val previewView = PreviewView(ctx)
+                        val cameraFuture = ProcessCameraProvider.getInstance(ctx)
+                        cameraFuture.addListener({
+                            try {
+                                val provider = cameraFuture.get()
                                 val preview  = Preview.Builder().build()
-                                    .also { it.setSurfaceProvider(pv.surfaceProvider) }
+                                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
                                 val capture  = ImageCapture.Builder()
                                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                                     .build()
                                 imageCapture = capture
-                                try {
-                                    provider.unbindAll()
-                                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
-                                } catch (_: Exception) {}
-                            }, executor)
-                        }
+                                provider.unbindAll()
+                                provider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    CameraSelector.DEFAULT_BACK_CAMERA,
+                                    preview,
+                                    capture,
+                                )
+                            } catch (_: Exception) {}
+                        }, executor)
+                        previewView
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
 
             CumplrButton(
-                text    = buttonLabel,
-                onClick = {
+                text     = buttonLabel,
+                enabled  = !isTakingPhoto,
+                onClick  = {
                     val capture = imageCapture ?: return@CumplrButton
-                    val tmp = File.createTempFile("cumplr_", ".jpg", context.cacheDir)
-                    capture.takePicture(
-                        ImageCapture.OutputFileOptions.Builder(tmp).build(),
-                        executor,
-                        object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                onPhotoCaptured(tmp.readBytes().also { tmp.delete() })
+                    if (isTakingPhoto) return@CumplrButton
+                    isTakingPhoto = true
+                    scope.launch {
+                        val tmp = try {
+                            withContext(Dispatchers.IO) {
+                                File.createTempFile("cumplr_", ".jpg", context.cacheDir)
                             }
-                            override fun onError(e: ImageCaptureException) { tmp.delete() }
-                        },
-                    )
+                        } catch (_: Exception) {
+                            isTakingPhoto = false
+                            return@launch
+                        }
+                        capture.takePicture(
+                            ImageCapture.OutputFileOptions.Builder(tmp).build(),
+                            executor,
+                            object : ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                    scope.launch(Dispatchers.IO) {
+                                        val bytes = try {
+                                            tmp.readBytes().also { tmp.delete() }
+                                        } catch (_: Exception) {
+                                            tmp.delete()
+                                            withContext(Dispatchers.Main) { isTakingPhoto = false }
+                                            return@launch
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            isTakingPhoto = false
+                                            onPhotoCaptured(bytes)
+                                        }
+                                    }
+                                }
+                                override fun onError(e: ImageCaptureException) {
+                                    tmp.delete()
+                                    isTakingPhoto = false
+                                }
+                            },
+                        )
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
