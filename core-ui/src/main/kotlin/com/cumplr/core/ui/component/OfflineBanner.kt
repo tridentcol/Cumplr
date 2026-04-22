@@ -1,5 +1,6 @@
 package com.cumplr.core.ui.component
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -27,6 +28,7 @@ import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.Spacing
 
+@SuppressLint("MissingPermission")
 @Composable
 fun rememberIsOnline(): Boolean {
     val context = LocalContext.current
@@ -34,9 +36,11 @@ fun rememberIsOnline(): Boolean {
 
     DisposableEffect(Unit) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        isOnline = (cm.activeNetwork
-            ?.let { cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
-            ?: false)
+
+        val activeNet = cm.activeNetwork
+        isOnline = activeNet != null &&
+            cm.getNetworkCapabilities(activeNet)
+                ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
 
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) { isOnline = true }
