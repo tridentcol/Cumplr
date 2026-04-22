@@ -34,9 +34,9 @@ fun rememberIsOnline(): Boolean {
 
     DisposableEffect(Unit) {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        isOnline = cm.activeNetwork
+        isOnline = (cm.activeNetwork
             ?.let { cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) }
-            == true
+            ?: false)
 
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) { isOnline = true }
