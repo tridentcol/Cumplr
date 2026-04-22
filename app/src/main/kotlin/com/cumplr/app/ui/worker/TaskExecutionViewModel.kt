@@ -86,10 +86,17 @@ class TaskExecutionViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val task = taskRepository.getTask(taskId).filterNotNull().first()
+            val isRejected = task.status == TaskStatus.REJECTED
 
-            if (task.status == TaskStatus.IN_PROGRESS) {
+            // Reopen rejected task: resets status to IN_PROGRESS, clears end photo in DB
+            if (isRejected) {
+                taskRepository.reopenTask(taskId)
+                photoStore.delete(taskId, "end")
+            }
+
+            if (task.status == TaskStatus.IN_PROGRESS || isRejected) {
                 val startBytes = photoStore.load(taskId, "start")
-                val endBytes   = photoStore.load(taskId, "end")
+                val endBytes   = if (isRejected) null else photoStore.load(taskId, "end")
                 val savedObs   = draftStore.loadObservations(taskId)
 
                 if (startBytes != null) _startPhotoBytes.value = startBytes
@@ -104,10 +111,10 @@ class TaskExecutionViewModel @Inject constructor(
                 }
 
                 _step.value = when {
-                    endBytes   != null       -> 4
-                    savedObs.isNotBlank()    -> 3
-                    startBytes != null       -> 2
-                    else                     -> 1
+                    endBytes   != null    -> 4
+                    savedObs.isNotBlank() -> 3
+                    startBytes != null    -> 2
+                    else                  -> 1
                 }
 
                 if (startBytes != null || endBytes != null || savedObs.isNotBlank()) {

@@ -77,6 +77,17 @@ interface TaskDao {
     @Query("""
         UPDATE tasks
         SET status = :status,
+            photo_end_url = NULL,
+            end_time = NULL,
+            updated_at = :updatedAt,
+            sync_pending = :syncPending
+        WHERE id = :taskId
+    """)
+    suspend fun reopenTask(taskId: String, status: String, updatedAt: String, syncPending: Int)
+
+    @Query("""
+        UPDATE tasks
+        SET status = :status,
             start_time = :startTime,
             updated_at = :updatedAt,
             sync_pending = :syncPending

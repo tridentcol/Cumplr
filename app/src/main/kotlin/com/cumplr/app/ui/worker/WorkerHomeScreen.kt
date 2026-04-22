@@ -10,9 +10,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,9 +34,11 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
@@ -49,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,12 +64,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.AppNotification
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.ui.component.CumplrBottomNav
 import com.cumplr.core.ui.component.CumplrNavItem
 import com.cumplr.core.ui.component.EmptyState
+import com.cumplr.core.ui.component.OfflineBanner
 import com.cumplr.core.ui.component.TaskCard
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrAccentInk
@@ -76,12 +83,15 @@ import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
+import com.cumplr.core.ui.theme.CumplrSurface3
 import com.cumplr.core.ui.theme.Spacing
+import java.time.Duration
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 private val ACTIVE_STATUSES  = setOf(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
 private val HISTORY_STATUSES = setOf(TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW, TaskStatus.APPROVED, TaskStatus.REJECTED)
@@ -117,10 +127,10 @@ fun WorkerHomeScreen(
     var selectedNav by remember { mutableStateOf("tareas") }
 
     val navItems = listOf(
-        CumplrNavItem("inicio",          Icons.Outlined.Home,          "Inicio"),
-        CumplrNavItem("tareas",          Icons.Outlined.CheckCircle,   "Tareas"),
-        CumplrNavItem("notificaciones",  Icons.Outlined.Notifications, "Avisos", badgeCount = unreadCount),
-        CumplrNavItem("perfil",          Icons.Outlined.Person,        "Perfil"),
+        CumplrNavItem("inicio",         Icons.Outlined.Home,          "Inicio"),
+        CumplrNavItem("tareas",         Icons.Outlined.CheckCircle,   "Tareas"),
+        CumplrNavItem("notificaciones", Icons.Outlined.Notifications, "Avisos", badgeCount = unreadCount),
+        CumplrNavItem("perfil",         Icons.Outlined.Person,        "Perfil"),
     )
 
     Scaffold(
@@ -136,38 +146,47 @@ fun WorkerHomeScreen(
             }
         },
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when (selectedNav) {
-                "inicio" -> WorkerInicioTab(
-                    userName           = userName,
-                    tasks              = tasks,
-                    onTaskClick        = onTaskClick,
-                    onHistoryTaskClick = onHistoryTaskClick,
-                )
-                "tareas" -> WorkerTareasTab(
-                    tasks              = tasks,
-                    isLoading          = isLoading,
-                    isRefreshing       = isRefreshing,
-                    onRefresh          = { viewModel.refresh() },
-                    onTaskClick        = onTaskClick,
-                    onHistoryTaskClick = onHistoryTaskClick,
-                )
-                "notificaciones" -> WorkerNotificationsTab(
-                    notifications = notifications,
-                    onMarkRead    = { viewModel.markNotificationRead(it) },
-                    onMarkAllRead = { viewModel.markAllNotificationsRead() },
-                    onTaskClick   = { taskId, status ->
-                        if (status in HISTORY_STATUSES) onHistoryTaskClick(taskId) else onTaskClick(taskId)
-                    },
-                )
-                "perfil" -> WorkerPerfilTab(
-                    name     = userName,
-                    onLogout = { viewModel.signOut() },
-                )
+            OfflineBanner()
+
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedNav) {
+                    "inicio" -> WorkerInicioTab(
+                        userName           = userName,
+                        tasks              = tasks,
+                        isRefreshing       = isRefreshing,
+                        onRefresh          = { viewModel.refresh() },
+                        onTaskClick        = onTaskClick,
+                        onHistoryTaskClick = onHistoryTaskClick,
+                    )
+                    "tareas" -> WorkerTareasTab(
+                        tasks              = tasks,
+                        isLoading          = isLoading,
+                        isRefreshing       = isRefreshing,
+                        onRefresh          = { viewModel.refresh() },
+                        onTaskClick        = onTaskClick,
+                        onHistoryTaskClick = onHistoryTaskClick,
+                    )
+                    "notificaciones" -> WorkerNotificationsTab(
+                        notifications = notifications,
+                        onMarkRead    = { viewModel.markNotificationRead(it) },
+                        onMarkAllRead = { viewModel.markAllNotificationsRead() },
+                        onTaskClick   = { taskId ->
+                            val task = tasks.find { it.id == taskId }
+                            if (task != null && task.status in HISTORY_STATUSES) onHistoryTaskClick(taskId)
+                            else onTaskClick(taskId)
+                        },
+                    )
+                    "perfil" -> WorkerPerfilTab(
+                        name     = userName,
+                        tasks    = tasks,
+                        onLogout = { viewModel.signOut() },
+                    )
+                }
             }
         }
     }
@@ -175,14 +194,17 @@ fun WorkerHomeScreen(
 
 // ── Inicio tab ────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorkerInicioTab(
     userName: String,
     tasks: List<Task>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onTaskClick: (String) -> Unit,
     onHistoryTaskClick: (String) -> Unit,
 ) {
-    val hour = LocalTime.now().hour
+    val hour = java.time.LocalTime.now().hour
     val salutation = when {
         hour < 12 -> "Buenos días"
         hour < 18 -> "Buenas tardes"
@@ -190,95 +212,155 @@ private fun WorkerInicioTab(
     }
     val firstName = userName.split(" ").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: userName
 
-    val assigned   = tasks.count { it.status == TaskStatus.ASSIGNED }
-    val inProgress = tasks.count { it.status == TaskStatus.IN_PROGRESS }
-    val completed  = tasks.count { it.status == TaskStatus.APPROVED }
+    val assigned    = tasks.count { it.status == TaskStatus.ASSIGNED }
+    val inProgress  = tasks.count { it.status == TaskStatus.IN_PROGRESS }
+    val completed   = tasks.count { it.status == TaskStatus.APPROVED }
+    val inProgressTask = tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS }
+
+    // Running timer for in-progress task
+    var elapsedSeconds by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(inProgressTask?.id) {
+        while (isActive) {
+            val start = inProgressTask?.startTime
+                ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            elapsedSeconds = if (start != null) Duration.between(start, Instant.now()).seconds else 0L
+            delay(1_000)
+        }
+    }
 
     val upcoming = tasks
-        .filter { it.status == TaskStatus.ASSIGNED || it.status == TaskStatus.IN_PROGRESS }
+        .filter { it.status == TaskStatus.ASSIGNED }
         .sortedWith(compareBy(nullsLast()) { it.deadline })
         .take(3)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh    = onRefresh,
+        modifier     = Modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.lg)
-                .padding(top = Spacing.lg, bottom = Spacing.md),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
         ) {
-            Text(
-                text  = salutation,
-                style = MaterialTheme.typography.bodyLarge,
-                color = CumplrFgMuted,
-            )
-            Text(
-                text  = firstName,
-                style = MaterialTheme.typography.headlineMedium,
-                color = CumplrFg,
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.lg)
-                .padding(bottom = Spacing.lg),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        ) {
-            WorkerStatCard(Modifier.weight(1f), "Asignadas",  "$assigned",   CumplrStatusProgressFg)
-            WorkerStatCard(Modifier.weight(1f), "En curso",   "$inProgress", CumplrAccent)
-            WorkerStatCard(Modifier.weight(1f), "Cumplidas",  "$completed",  CumplrStatusDoneFg)
-        }
-
-        if (upcoming.isNotEmpty()) {
-            Text(
-                text     = "Próximas tareas",
-                style    = MaterialTheme.typography.labelMedium,
-                color    = CumplrFgMuted,
+            Column(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(horizontal = Spacing.lg)
-                    .padding(bottom = Spacing.sm),
-            )
-            upcoming.forEach { task ->
-                TaskCard(
-                    task    = task,
-                    onClick = {
-                        if (task.status in ACTIVE_STATUSES) onTaskClick(task.id)
-                        else onHistoryTaskClick(task.id)
-                    },
+                    .padding(top = Spacing.lg, bottom = Spacing.md),
+            ) {
+                Text(salutation, style = MaterialTheme.typography.bodyLarge, color = CumplrFgMuted)
+                Text(firstName,  style = MaterialTheme.typography.headlineMedium, color = CumplrFg)
+            }
+
+            // Stats row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                WorkerStatCard(Modifier.weight(1f), "Asignadas",  "$assigned",   CumplrStatusProgressFg)
+                WorkerStatCard(Modifier.weight(1f), "En curso",   "$inProgress", CumplrAccent)
+                WorkerStatCard(Modifier.weight(1f), "Cumplidas",  "$completed",  CumplrStatusDoneFg)
+            }
+
+            // In-progress widget
+            if (inProgressTask != null) {
+                InProgressWidget(
+                    task           = inProgressTask,
+                    elapsedSeconds = elapsedSeconds,
+                    onClick        = { onTaskClick(inProgressTask.id) },
+                    modifier       = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg)
+                        .padding(bottom = Spacing.md),
+                )
+            }
+
+            // Upcoming assigned tasks
+            if (upcoming.isNotEmpty()) {
+                Text(
+                    text     = "Próximas tareas",
+                    style    = MaterialTheme.typography.labelMedium,
+                    color    = CumplrFgMuted,
                     modifier = Modifier
                         .padding(horizontal = Spacing.lg)
                         .padding(bottom = Spacing.sm),
                 )
-            }
-        } else if (tasks.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(Spacing.lg),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text  = "No hay tareas pendientes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CumplrFgMuted,
-                )
+                upcoming.forEach { task ->
+                    TaskCard(
+                        task     = task,
+                        onClick  = { onTaskClick(task.id) },
+                        modifier = Modifier
+                            .padding(horizontal = Spacing.lg)
+                            .padding(bottom = Spacing.sm),
+                    )
+                }
+            } else if (inProgressTask == null && tasks.isNotEmpty()) {
+                Box(
+                    modifier         = Modifier.fillMaxWidth().padding(Spacing.lg),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("No hay tareas pendientes.", style = MaterialTheme.typography.bodyMedium, color = CumplrFgMuted)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun WorkerStatCard(
+private fun InProgressWidget(
+    task: Task,
+    elapsedSeconds: Long,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    label: String,
-    value: String,
-    color: Color = CumplrFg,
 ) {
+    val h = elapsedSeconds / 3600
+    val m = (elapsedSeconds % 3600) / 60
+    val s = elapsedSeconds % 60
+    val timerText = if (h > 0) "%dh %02dm %02ds".format(h, m, s) else "%dm %02ds".format(m, s)
+
+    Row(
+        modifier = modifier
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrAccent.copy(alpha = 0.10f))
+            .clickable(onClick = onClick)
+            .padding(Spacing.md),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(CumplrAccent.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector        = Icons.Outlined.PlayArrow,
+                contentDescription = null,
+                tint               = CumplrAccent,
+                modifier           = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text     = task.title,
+                style    = MaterialTheme.typography.bodyMedium,
+                color    = CumplrFg,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text("En curso · $timerText", style = MaterialTheme.typography.labelSmall, color = CumplrAccent)
+        }
+    }
+}
+
+@Composable
+private fun WorkerStatCard(modifier: Modifier = Modifier, label: String, value: String, color: Color = CumplrFg) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -304,9 +386,7 @@ private fun WorkerTareasTab(
     onHistoryTaskClick: (String) -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val filteredTasks = remember(tasks, selectedTab) {
-        tasks.filter(TASK_TABS[selectedTab].filter)
-    }
+    val filteredTasks = remember(tasks, selectedTab) { tasks.filter(TASK_TABS[selectedTab].filter) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScrollableTabRow(
@@ -315,10 +395,7 @@ private fun WorkerTareasTab(
             contentColor     = CumplrAccent,
             edgePadding      = 0.dp,
             indicator        = { tabPositions ->
-                SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color    = CumplrAccent,
-                )
+                SecondaryIndicator(Modifier.tabIndicatorOffset(tabPositions[selectedTab]), color = CumplrAccent)
             },
         ) {
             TASK_TABS.forEachIndexed { index, tab ->
@@ -329,26 +406,18 @@ private fun WorkerTareasTab(
                     selectedContentColor   = CumplrAccent,
                     unselectedContentColor = CumplrFgMuted,
                     text = {
-                        Row(
-                            verticalAlignment     = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                             Text(tab.label, style = MaterialTheme.typography.labelSmall)
                             if (count > 0) {
                                 Box(
                                     modifier = Modifier
                                         .clip(CircleShape)
-                                        .background(
-                                            if (selectedTab == index) CumplrAccent else CumplrSurface2,
-                                        )
+                                        .background(if (selectedTab == index) CumplrAccent else CumplrSurface2)
                                         .padding(horizontal = 5.dp, vertical = 1.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        text  = "$count",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (selectedTab == index) CumplrAccentInk else CumplrFgMuted,
-                                    )
+                                    Text("$count", style = MaterialTheme.typography.labelSmall,
+                                        color = if (selectedTab == index) CumplrAccentInk else CumplrFgMuted)
                                 }
                             }
                         }
@@ -357,22 +426,11 @@ private fun WorkerTareasTab(
             }
         }
 
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh    = onRefresh,
-            modifier     = Modifier.weight(1f),
-        ) {
+        PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
             when {
-                isLoading          -> SkeletonList()
-                filteredTasks.isEmpty() -> Box(
-                    modifier         = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    EmptyState(
-                        icon     = Icons.Outlined.CheckCircle,
-                        title    = "Sin tareas",
-                        subtitle = "No hay tareas en este filtro por ahora.",
-                    )
+                isLoading -> SkeletonList()
+                filteredTasks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(Icons.Outlined.CheckCircle, "Sin tareas", "No hay tareas en este filtro por ahora.")
                 }
                 else -> LazyColumn(
                     contentPadding      = PaddingValues(Spacing.lg),
@@ -401,7 +459,7 @@ private fun WorkerNotificationsTab(
     notifications: List<AppNotification>,
     onMarkRead: (String) -> Unit,
     onMarkAllRead: () -> Unit,
-    onTaskClick: (String, TaskStatus?) -> Unit,
+    onTaskClick: (String) -> Unit,
 ) {
     val unread = notifications.count { !it.read }
 
@@ -414,29 +472,17 @@ private fun WorkerNotificationsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically,
         ) {
-            Text(
-                text  = "Notificaciones",
-                style = MaterialTheme.typography.titleMedium,
-                color = CumplrFg,
-            )
+            Text("Notificaciones", style = MaterialTheme.typography.titleMedium, color = CumplrFg)
             if (unread > 0) {
                 TextButton(onClick = onMarkAllRead) {
-                    Text(
-                        text  = "Marcar todo como leído",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CumplrAccent,
-                    )
+                    Text("Marcar todo como leído", style = MaterialTheme.typography.labelSmall, color = CumplrAccent)
                 }
             }
         }
 
         if (notifications.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                EmptyState(
-                    icon     = Icons.Outlined.Notifications,
-                    title    = "Sin notificaciones",
-                    subtitle = "Aquí aparecerán los avisos de tus tareas.",
-                )
+                EmptyState(Icons.Outlined.Notifications, "Sin notificaciones", "Aquí aparecerán los avisos de tus tareas.")
             }
         } else {
             LazyColumn(
@@ -445,13 +491,10 @@ private fun WorkerNotificationsTab(
                 modifier            = Modifier.fillMaxSize(),
             ) {
                 items(notifications.sortedByDescending { it.createdAt }, key = { it.id }) { notif ->
-                    NotificationRow(
-                        notif   = notif,
-                        onClick = {
-                            if (!notif.read) onMarkRead(notif.id)
-                            notif.taskId?.let { onTaskClick(it, null) }
-                        },
-                    )
+                    NotificationRow(notif = notif, onClick = {
+                        if (!notif.read) onMarkRead(notif.id)
+                        notif.taskId?.let { onTaskClick(it) }
+                    })
                 }
             }
         }
@@ -478,43 +521,47 @@ private fun NotificationRow(notif: AppNotification, onClick: () -> Unit) {
                 .background(if (notif.read) CumplrSurface2 else CumplrAccent),
         )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text  = notif.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = CumplrFg,
-            )
-            Text(
-                text  = notif.body,
-                style = MaterialTheme.typography.bodySmall,
-                color = CumplrFgMuted,
-            )
+            Text(notif.title, style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
+            Text(notif.body,  style = MaterialTheme.typography.bodySmall,  color = CumplrFgMuted)
             Spacer(Modifier.height(2.dp))
-            Text(
-                text  = formatNotifTime(notif.createdAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = CumplrFgMuted,
-            )
+            Text(formatNotifTime(notif.createdAt), style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
         }
     }
 }
 
 private fun formatNotifTime(iso: String): String = try {
-    val instant = Instant.parse(iso)
-    val zdt     = instant.atZone(ZoneId.systemDefault())
-    zdt.format(DateTimeFormatter.ofPattern("dd MMM, HH:mm", Locale.getDefault()))
+    Instant.parse(iso).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("dd MMM, HH:mm", Locale.getDefault()))
 } catch (_: Exception) { "" }
 
 // ── Perfil tab ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun WorkerPerfilTab(name: String, onLogout: () -> Unit) {
+private fun WorkerPerfilTab(name: String, tasks: List<Task>, onLogout: () -> Unit) {
+    val approved     = tasks.count { it.status == TaskStatus.APPROVED }
+    val rejected     = tasks.count { it.status == TaskStatus.REJECTED }
+    val totalFinished = approved + rejected
+    val approvalRate = if (totalFinished > 0) approved.toFloat() / totalFinished else null
+
+    val avgMinutes = tasks
+        .filter { it.status == TaskStatus.APPROVED && it.startTime != null && it.endTime != null }
+        .mapNotNull { t ->
+            runCatching {
+                Duration.between(Instant.parse(t.startTime!!), Instant.parse(t.endTime!!)).toMinutes()
+            }.getOrNull()
+        }
+        .takeIf { it.isNotEmpty() }
+        ?.average()
+        ?.toLong()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(Spacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(32.dp))
 
         Box(
             modifier = Modifier
@@ -531,32 +578,107 @@ private fun WorkerPerfilTab(name: String, onLogout: () -> Unit) {
         }
 
         Spacer(Modifier.height(Spacing.md))
+        Text(name, style = MaterialTheme.typography.titleLarge, color = CumplrFg)
+        Spacer(Modifier.height(Spacing.lg))
 
-        Text(
-            text  = name,
-            style = MaterialTheme.typography.titleLarge,
-            color = CumplrFg,
-        )
+        // Stats grid
+        if (totalFinished > 0 || avgMinutes != null) {
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                if (approvalRate != null) {
+                    PerfilStatCard(
+                        modifier = Modifier.weight(1f),
+                        label    = "Tasa de aprobación",
+                        value    = "${(approvalRate * 100).toInt()}%",
+                        color    = if (approvalRate >= 0.8f) CumplrStatusDoneFg else if (approvalRate >= 0.5f) CumplrStatusProgressFg else CumplrStatusOverdueFg,
+                    )
+                }
+                PerfilStatCard(
+                    modifier = Modifier.weight(1f),
+                    label    = "Tareas cumplidas",
+                    value    = "$approved",
+                    color    = CumplrStatusDoneFg,
+                )
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                if (avgMinutes != null) {
+                    val avgDisplay = if (avgMinutes >= 60) "${avgMinutes / 60}h ${avgMinutes % 60}m" else "${avgMinutes}m"
+                    PerfilStatCard(
+                        modifier = Modifier.weight(1f),
+                        label    = "Duración promedio",
+                        value    = avgDisplay,
+                        color    = CumplrAccent,
+                    )
+                }
+                if (rejected > 0) {
+                    PerfilStatCard(
+                        modifier = Modifier.weight(1f),
+                        label    = "Rechazadas",
+                        value    = "$rejected",
+                        color    = CumplrStatusOverdueFg,
+                    )
+                }
+            }
+            Spacer(Modifier.height(Spacing.lg))
+        }
 
-        Spacer(Modifier.height(Spacing.xl))
+        // Approval rate progress bar
+        if (approvalRate != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CumplrSurface)
+                    .padding(Spacing.md),
+            ) {
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Rendimiento", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                    Text("$approved / $totalFinished tareas aprobadas", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                }
+                Spacer(Modifier.height(Spacing.sm))
+                LinearProgressIndicator(
+                    progress    = { approvalRate.coerceIn(0f, 1f) },
+                    modifier    = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    color       = if (approvalRate >= 0.8f) CumplrStatusDoneFg else if (approvalRate >= 0.5f) CumplrStatusProgressFg else CumplrStatusOverdueFg,
+                    trackColor  = CumplrSurface2,
+                )
+            }
+            Spacer(Modifier.height(Spacing.lg))
+        }
 
         Button(
             onClick  = onLogout,
             modifier = Modifier.fillMaxWidth(),
-            colors   = ButtonDefaults.buttonColors(
-                containerColor = CumplrSurface,
-                contentColor   = CumplrStatusOverdueFg,
-            ),
-            shape = RoundedCornerShape(10.dp),
+            colors   = ButtonDefaults.buttonColors(containerColor = CumplrSurface, contentColor = CumplrStatusOverdueFg),
+            shape    = RoundedCornerShape(10.dp),
         ) {
-            androidx.compose.material3.Icon(
-                imageVector        = Icons.AutoMirrored.Outlined.ExitToApp,
-                contentDescription = "Salir",
-                modifier           = Modifier.size(18.dp),
-            )
+            androidx.compose.material3.Icon(Icons.AutoMirrored.Outlined.ExitToApp, "Salir", modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(Spacing.sm))
             Text("Cerrar sesión", style = MaterialTheme.typography.labelLarge)
         }
+    }
+}
+
+@Composable
+private fun PerfilStatCard(modifier: Modifier = Modifier, label: String, value: String, color: Color = CumplrFg) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrSurface)
+            .padding(Spacing.md),
+    ) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, color = color)
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
     }
 }
 
@@ -581,47 +703,22 @@ private fun TaskCardSkeleton() {
         animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
         label         = "alpha",
     )
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(IntrinsicSize.Min)
             .clip(RoundedCornerShape(12.dp))
-            .background(CumplrSurface)
-            .padding(Spacing.lg),
+            .background(CumplrSurface),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(16.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(CumplrFgMuted.copy(alpha = alpha))
-                )
+        Box(Modifier.width(3.dp).fillMaxHeight().background(CumplrSurface3))
+        Column(Modifier.weight(1f).padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Box(Modifier.weight(1f).height(16.dp).clip(RoundedCornerShape(4.dp)).background(CumplrFgMuted.copy(alpha = alpha)))
                 Spacer(Modifier.width(Spacing.sm))
-                Box(
-                    Modifier
-                        .size(60.dp, 20.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(CumplrFgMuted.copy(alpha = alpha))
-                )
+                Box(Modifier.size(60.dp, 20.dp).clip(RoundedCornerShape(99.dp)).background(CumplrFgMuted.copy(alpha = alpha)))
             }
-            Box(
-                Modifier
-                    .fillMaxWidth(0.7f)
-                    .height(13.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(CumplrFgMuted.copy(alpha = alpha))
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth(0.4f)
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(CumplrFgMuted.copy(alpha = alpha))
-            )
+            Box(Modifier.fillMaxWidth(0.7f).height(13.dp).clip(RoundedCornerShape(4.dp)).background(CumplrFgMuted.copy(alpha = alpha)))
+            Box(Modifier.fillMaxWidth(0.4f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(CumplrFgMuted.copy(alpha = alpha)))
         }
     }
 }

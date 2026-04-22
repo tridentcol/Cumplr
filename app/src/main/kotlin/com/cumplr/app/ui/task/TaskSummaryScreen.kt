@@ -1,6 +1,8 @@
 package com.cumplr.app.ui.task
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -32,14 +34,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -49,11 +57,12 @@ import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.model.User
 import com.cumplr.core.ui.component.CumplrAppBar
-import com.cumplr.core.ui.component.CumplrCard
 import com.cumplr.core.ui.component.CumplrChip
 import com.cumplr.core.ui.theme.CumplrAccent
+import com.cumplr.core.ui.theme.CumplrBackground
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
+import com.cumplr.core.ui.theme.CumplrFgSubtle
 import com.cumplr.core.ui.theme.CumplrStatusDoneBg
 import com.cumplr.core.ui.theme.CumplrStatusDoneFg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
@@ -75,7 +84,7 @@ fun TaskSummaryScreen(
     val task   by viewModel.task.collectAsStateWithLifecycle()
     val worker by viewModel.worker.collectAsStateWithLifecycle()
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = Modifier.fillMaxSize(), color = CumplrBackground) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
             CumplrAppBar(
                 title = "Resumen de tarea",
@@ -85,7 +94,6 @@ fun TaskSummaryScreen(
                     }
                 },
             )
-
             val t = task
             if (t == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -100,151 +108,129 @@ fun TaskSummaryScreen(
 
 @Composable
 private fun SummaryContent(task: Task, worker: User?) {
+    var fullscreenUrl by remember { mutableStateOf<String?>(null) }
+
+    // Fullscreen photo viewer dialog
+    fullscreenUrl?.let { url ->
+        Dialog(
+            onDismissRequest = { fullscreenUrl = null },
+            properties       = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier         = Modifier.fillMaxSize().background(Color.Black),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model              = ImageRequest.Builder(LocalContext.current)
+                        .data(url).crossfade(true).build(),
+                    contentDescription = null,
+                    contentScale       = ContentScale.Fit,
+                    modifier           = Modifier.fillMaxSize(),
+                )
+                IconButton(
+                    onClick  = { fullscreenUrl = null },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(Spacing.lg),
+                ) {
+                    Icon(Icons.Outlined.Close, "Cerrar", tint = Color.White)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(Spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            .padding(horizontal = Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.lg),
     ) {
-        // ── Header: title + status ────────────────────────────────────────────
-        CumplrCard {
+        Spacer(Modifier.height(Spacing.sm))
+
+        // ── Hero ──────────────────────────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
                     text     = task.title,
-                    style    = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    style    = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color    = CumplrFg,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(Spacing.sm))
                 CumplrChip(status = task.status)
             }
-
             if (!task.description.isNullOrBlank()) {
-                Spacer(Modifier.height(Spacing.sm))
-                Text(
-                    text  = task.description.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CumplrFgMuted,
-                )
+                Text(task.description.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFgMuted)
             }
-
             if (!task.location.isNullOrBlank()) {
-                Spacer(Modifier.height(Spacing.sm))
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(Icons.Outlined.LocationOn, null, tint = CumplrFgMuted, modifier = Modifier.size(14.dp))
-                    Text(task.location.orEmpty(), style = MaterialTheme.typography.bodySmall, color = CumplrFgMuted)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Outlined.LocationOn, null, tint = CumplrFgSubtle, modifier = Modifier.size(14.dp))
+                    Text(task.location.orEmpty(), style = MaterialTheme.typography.bodySmall, color = CumplrFgSubtle)
                 }
             }
-        }
-
-        // ── Worker ────────────────────────────────────────────────────────────
-        if (worker != null) {
-            CumplrCard {
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(CumplrAccent.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text  = worker.name.firstOrNull()?.uppercase() ?: "?",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = CumplrAccent,
-                        )
-                    }
-                    Column {
-                        Text(
-                            text  = worker.name,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = CumplrFg,
-                        )
-                        if (!worker.position.isNullOrBlank()) {
-                            Text(worker.position.orEmpty(), style = MaterialTheme.typography.bodySmall, color = CumplrFgMuted)
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Timeline ──────────────────────────────────────────────────────────
-        CumplrCard {
-            val elapsed = formatElapsed(task.startTime, task.endTime)
-            val startFmt = formatDateTime(task.startTime)
-            val endFmt   = formatDateTime(task.endTime)
-
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                Icon(Icons.Outlined.AccessTime, null, tint = CumplrAccent, modifier = Modifier.size(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Duración", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
-                    Text(elapsed, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = CumplrFg)
-                }
-            }
-
-            if (startFmt != null || endFmt != null) {
-                Spacer(Modifier.height(Spacing.sm))
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                ) {
-                    if (startFmt != null) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Inicio", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
-                            Text(startFmt, style = MaterialTheme.typography.bodySmall, color = CumplrFg)
-                        }
-                    }
-                    if (endFmt != null) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Finalización", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
-                            Text(endFmt, style = MaterialTheme.typography.bodySmall, color = CumplrFg)
-                        }
-                    }
-                }
-            }
-
             if (!task.deadline.isNullOrBlank()) {
-                Spacer(Modifier.height(Spacing.sm))
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(Icons.Outlined.CalendarToday, null, tint = CumplrFgMuted, modifier = Modifier.size(13.dp))
-                    Text(
-                        text  = "Deadline: ${task.deadline.orEmpty().take(10)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CumplrFgMuted,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Outlined.CalendarToday, null, tint = CumplrFgSubtle, modifier = Modifier.size(13.dp))
+                    Text("Deadline: ${task.deadline.orEmpty().take(10)}", style = MaterialTheme.typography.bodySmall, color = CumplrFgSubtle)
                 }
             }
         }
 
-        // ── Photos ────────────────────────────────────────────────────────────
+        // ── Photos (4:3, fullscreen on tap) ───────────────────────────────────
         if (task.photoStartUrl != null || task.photoEndUrl != null) {
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                SummaryPhotoCard("Foto inicio", task.photoStartUrl, Modifier.weight(1f))
-                SummaryPhotoCard("Foto final",  task.photoEndUrl,   Modifier.weight(1f))
+                PhotoCard("Foto inicio", task.photoStartUrl, Modifier.weight(1f)) {
+                    task.photoStartUrl?.let { fullscreenUrl = it }
+                }
+                PhotoCard("Foto final",  task.photoEndUrl,   Modifier.weight(1f)) {
+                    task.photoEndUrl?.let { fullscreenUrl = it }
+                }
             }
         }
 
-        // ── Worker observations ───────────────────────────────────────────────
+        // ── Status timeline ───────────────────────────────────────────────────
+        StatusTimeline(task = task)
+
+        // ── Worker ────────────────────────────────────────────────────────────
+        if (worker != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CumplrSurface)
+                    .padding(Spacing.md),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(CumplrAccent.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text  = worker.name.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = CumplrAccent,
+                    )
+                }
+                Column {
+                    Text(worker.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = CumplrFg)
+                    if (!worker.position.isNullOrBlank()) {
+                        Text(worker.position.orEmpty(), style = MaterialTheme.typography.bodySmall, color = CumplrFgMuted)
+                    }
+                }
+            }
+        }
+
+        // ── Observations ──────────────────────────────────────────────────────
         if (!task.observations.isNullOrBlank()) {
             Column(
                 modifier = Modifier
@@ -259,7 +245,7 @@ private fun SummaryContent(task: Task, worker: User?) {
             }
         }
 
-        // ── Chief feedback ────────────────────────────────────────────────────
+        // ── Feedback ──────────────────────────────────────────────────────────
         if (!task.feedback.isNullOrBlank()) {
             Row(
                 modifier = Modifier
@@ -280,19 +266,16 @@ private fun SummaryContent(task: Task, worker: User?) {
 
         // ── Rejection reason ──────────────────────────────────────────────────
         if (task.status == TaskStatus.REJECTED && !task.rejectionReason.isNullOrBlank()) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(CumplrStatusOverdueBg)
                     .padding(Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment     = Alignment.Top,
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                    Text("Motivo del rechazo", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg)
-                    Text(task.rejectionReason.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
-                }
+                Text("Motivo del rechazo", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg)
+                Text(task.rejectionReason.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
             }
         }
 
@@ -300,22 +283,29 @@ private fun SummaryContent(task: Task, worker: User?) {
     }
 }
 
+// ── Photo card ────────────────────────────────────────────────────────────────
+
 @Composable
-private fun SummaryPhotoCard(label: String, url: String?, modifier: Modifier = Modifier) {
+private fun PhotoCard(label: String, url: String?, modifier: Modifier = Modifier, onTap: () -> Unit) {
     Column(modifier = modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
         Spacer(Modifier.height(Spacing.xs))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f)
+                .aspectRatio(4f / 3f)
                 .clip(RoundedCornerShape(10.dp))
-                .background(CumplrSurface3),
+                .background(CumplrSurface3)
+                .then(if (url != null) Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication        = null,
+                    onClick           = onTap,
+                ) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             if (url != null) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                    model              = ImageRequest.Builder(LocalContext.current)
                         .data(url).crossfade(true).build(),
                     contentDescription = label,
                     contentScale       = ContentScale.Crop,
@@ -327,6 +317,88 @@ private fun SummaryPhotoCard(label: String, url: String?, modifier: Modifier = M
         }
     }
 }
+
+// ── Status timeline ───────────────────────────────────────────────────────────
+
+private data class TimelineNode(
+    val label: String,
+    val time: String?,
+    val reached: Boolean,
+    val nodeColor: Color,
+    val isLast: Boolean = false,
+)
+
+@Composable
+private fun StatusTimeline(task: Task) {
+    val finalReached = task.status == TaskStatus.APPROVED || task.status == TaskStatus.REJECTED
+    val nodes = listOf(
+        TimelineNode("Asignada", formatDateTime(task.createdAt), reached = true,          nodeColor = CumplrFgMuted),
+        TimelineNode("Iniciada", formatDateTime(task.startTime), reached = task.startTime != null, nodeColor = CumplrAccent),
+        TimelineNode("Enviada",  formatDateTime(task.endTime),   reached = task.endTime != null,   nodeColor = CumplrAccent),
+        TimelineNode(
+            label     = when (task.status) { TaskStatus.APPROVED -> "Aprobada"; TaskStatus.REJECTED -> "Rechazada"; else -> "Pendiente de revisión" },
+            time      = if (finalReached) formatDateTime(task.updatedAt) else null,
+            reached   = finalReached,
+            nodeColor = when (task.status) { TaskStatus.APPROVED -> CumplrStatusDoneFg; TaskStatus.REJECTED -> CumplrStatusOverdueFg; else -> CumplrFgSubtle },
+            isLast    = true,
+        ),
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrSurface)
+            .padding(Spacing.md),
+    ) {
+        if (task.startTime != null && task.endTime != null) {
+            Text("Duración total", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+            Text(
+                formatElapsed(task.startTime, task.endTime),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = CumplrFg,
+            )
+            Spacer(Modifier.height(Spacing.md))
+        }
+        nodes.forEachIndexed { i, node ->
+            TimelineRow(node = node, showConnector = i < nodes.lastIndex)
+        }
+    }
+}
+
+@Composable
+private fun TimelineRow(node: TimelineNode, showConnector: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(20.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(if (node.reached) node.nodeColor else CumplrSurface3),
+            )
+            if (showConnector) {
+                Box(modifier = Modifier.width(2.dp).height(28.dp).background(CumplrSurface3))
+            }
+        }
+        Spacer(Modifier.width(Spacing.sm))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = if (showConnector) Spacing.xs else 0.dp),
+        ) {
+            Text(
+                text  = node.label,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = if (node.reached) CumplrFg else CumplrFgSubtle,
+            )
+            if (node.time != null) {
+                Text(node.time, style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+            }
+        }
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 private fun formatElapsed(startTime: String?, endTime: String?): String {
     if (startTime == null || endTime == null) return "—"
