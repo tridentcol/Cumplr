@@ -82,7 +82,8 @@ class SupabaseRealtimeClient @Inject constructor() {
 
             override fun onClosed(socket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "Closed $code")
-                stopHeartbeat()
+                // heartbeat is managed by disconnect(); don't touch it here to
+                // avoid cancelling a freshly started heartbeat on reconnect
             }
         })
     }

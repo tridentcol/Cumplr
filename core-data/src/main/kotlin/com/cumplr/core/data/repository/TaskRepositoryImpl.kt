@@ -45,6 +45,21 @@ class TaskRepositoryImpl @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private suspend fun <T> withFreshToken(block: (String) -> T): T {
+        val session = sessionManager.getSession().first()
+            ?: throw Exception("Sin sesión activa")
+        return try {
+            block(session.accessToken)
+        } catch (e: Exception) {
+            if (e.message?.startsWith("HTTP 401") == true && session.refreshToken.isNotBlank()) {
+                Log.d(TAG, "401 — refreshing token")
+                val (newAccess, newRefresh) = restClient.refreshToken(session.refreshToken)
+                sessionManager.updateTokens(newAccess, newRefresh)
+                block(newAccess)
+            } else throw e
+        }
+    }
+
     // ── Worker queries ────────────────────────────────────────────────────────
 
     override fun getMyTasks(userId: String): Flow<List<Task>> =
@@ -55,13 +70,10 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun refresh(userId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val session = sessionManager.getSession().first()
-                ?: return@withContext Result.failure(Exception("Sin sesión activa"))
-
             // Snapshot current DB state to detect transitions
             val existing = taskDao.getTasksByAssignedTo(userId).first().associateBy { it.id }
 
-            val dtos = restClient.getTasks(session.accessToken, userId)
+            val dtos = withFreshToken { token -> restClient.getTasks(token, userId) }
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refresh OK — ${dtos.size} tasks")
 
@@ -199,9 +211,7 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun refreshCompanyTasks(companyId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val session = sessionManager.getSession().first()
-                ?: return@withContext Result.failure(Exception("Sin sesión activa"))
-            val dtos = restClient.getCompanyTasks(session.accessToken, companyId)
+            val dtos = withFreshToken { token -> restClient.getCompanyTasks(token, companyId) }
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refreshCompanyTasks OK — ${dtos.size}")
             Result.success(Unit)
