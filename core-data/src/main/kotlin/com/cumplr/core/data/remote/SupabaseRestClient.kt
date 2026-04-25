@@ -7,9 +7,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -124,22 +121,6 @@ class SupabaseRestClient @Inject constructor() {
 
     // ── Tasks ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Returns true if the JWT will expire within [bufferSeconds] from now.
-     * Reads the exp claim from the token payload without a network call.
-     */
-    fun isTokenExpiredOrExpiringSoon(accessToken: String, bufferSeconds: Long = 60): Boolean {
-        return try {
-            val payloadB64 = accessToken.split(".").getOrNull(1) ?: return true
-            val padded = payloadB64 + "=".repeat((4 - payloadB64.length % 4) % 4)
-            val payloadJson = String(android.util.Base64.decode(padded, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP))
-            val exp = json.parseToJsonElement(payloadJson)
-                .jsonObject["exp"]?.jsonPrimitive?.longOrNull ?: return true
-            val nowSecs = System.currentTimeMillis() / 1000L
-            (exp - nowSecs) < bufferSeconds
-        } catch (_: Exception) { true }
-    }
-
     fun getTasks(accessToken: String, userId: String): List<TaskDto> {
         val request = Request.Builder()
             .url("${SupabaseConfig.url}/rest/v1/tasks?assigned_to=eq.$userId&select=*&order=deadline.asc.nullslast")
@@ -202,7 +183,7 @@ class SupabaseRestClient @Inject constructor() {
             .header("apikey", SupabaseConfig.anonKey)
             .header("Authorization", "Bearer $accessToken")
             .header("Content-Type", "application/json")
-            .header("Prefer", "return=minimal,resolution=merge-duplicates")
+            .header("Prefer", "return=minimal")
             .build()
 
         Log.d(TAG, "▶ POST /rest/v1/tasks  body=${jsonBody.take(200)}")
@@ -210,6 +191,9 @@ class SupabaseRestClient @Inject constructor() {
         val body = response.body?.string() ?: ""
         Log.d(TAG, "◀ code=${response.code}")
 
+        // 409 = primary-key conflict ⇒ row already inserted by a previous attempt.
+        // Treat as idempotent success so the retry path can clear the local pending flag.
+        if (response.code == 409) return
         if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
     }
 
