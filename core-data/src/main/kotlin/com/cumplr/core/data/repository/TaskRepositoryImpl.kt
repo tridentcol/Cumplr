@@ -458,7 +458,7 @@ class TaskRepositoryImpl @Inject constructor(
                 rejectionReason = null,
                 createdAt       = now,
                 updatedAt       = now,
-                syncPending     = false,
+                syncPending     = true,
             )
             taskDao.upsertTask(entity)
             val task = entity.toDomain()
@@ -467,10 +467,10 @@ class TaskRepositoryImpl @Inject constructor(
                     CreateTaskBody(taskId, companyId, title, description, location, assignedTo, assignedBy, "ASSIGNED", priority.name, deadline, now, now)
                 )
                 auth.withValidToken { token -> restClient.postTask(token, body) }
+                taskDao.clearSyncPending(taskId)
                 Log.d(TAG, "createTask posted to Supabase — taskId=$taskId")
             } catch (e: Exception) {
-                Log.w(TAG, "createTask sync failed: ${e.message}")
-                taskDao.markSyncPending(taskId)
+                Log.w(TAG, "createTask sync failed, queued for retry: ${e.message}")
             }
             task
         }
