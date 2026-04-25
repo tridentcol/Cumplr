@@ -325,24 +325,78 @@ private data class TimelineNode(
     val time: String?,
     val reached: Boolean,
     val nodeColor: Color,
-    val isLast: Boolean = false,
+    val subtitle: String? = null,
 )
+
+private fun buildTimelineNodes(task: Task): List<TimelineNode> {
+    val wasRejected        = !task.rejectionReason.isNullOrBlank()
+    val currentlyRejected  = task.status == TaskStatus.REJECTED
+    val currentlyApproved  = task.status == TaskStatus.APPROVED
+    val finalState         = currentlyRejected || currentlyApproved
+    val reopenedNoResub    = wasRejected && task.status == TaskStatus.IN_PROGRESS && task.endTime == null
+    val resubmitted        = wasRejected && !currentlyRejected && task.endTime != null
+
+    return buildList {
+        add(TimelineNode("Asignada",  formatDateTime(task.createdAt),  reached = true,                   nodeColor = CumplrFgMuted))
+        add(TimelineNode("Iniciada",  formatDateTime(task.startTime),  reached = task.startTime != null, nodeColor = CumplrAccent))
+
+        if (!wasRejected) {
+            add(TimelineNode("Enviada", formatDateTime(task.endTime), reached = task.endTime != null, nodeColor = CumplrAccent))
+            add(TimelineNode(
+                label     = when (task.status) {
+                    TaskStatus.APPROVED -> "Aprobada"
+                    TaskStatus.REJECTED -> "Rechazada"
+                    else                -> "Pendiente de revisión"
+                },
+                time      = if (finalState) formatDateTime(task.updatedAt) else null,
+                reached   = finalState || task.status == TaskStatus.SUBMITTED || task.status == TaskStatus.UNDER_REVIEW,
+                nodeColor = when (task.status) {
+                    TaskStatus.APPROVED                          -> CumplrStatusDoneFg
+                    TaskStatus.REJECTED                          -> CumplrStatusOverdueFg
+                    TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> CumplrAccent
+                    else                                         -> CumplrFgSubtle
+                },
+            ))
+        } else {
+            // First submission — timestamp only available if task is currently REJECTED
+            // (reopenTask clears endTime, so after reopen we lose the first submission time)
+            val firstSubmitTime = if (currentlyRejected) formatDateTime(task.endTime) else null
+            add(TimelineNode("1er envío", firstSubmitTime, reached = true, nodeColor = CumplrAccent))
+
+            // Rejection node
+            add(TimelineNode(
+                label    = "Rechazada",
+                time     = if (currentlyRejected) formatDateTime(task.updatedAt) else null,
+                reached  = true,
+                nodeColor = CumplrStatusOverdueFg,
+                subtitle  = task.rejectionReason,
+            ))
+
+            when {
+                currentlyRejected -> Unit // rejection is the final node
+
+                reopenedNoResub -> {
+                    add(TimelineNode("Re-abierta", null, reached = true, nodeColor = CumplrAccent))
+                    add(TimelineNode("Pendiente de re-envío", null, reached = false, nodeColor = CumplrFgSubtle))
+                }
+
+                resubmitted -> {
+                    add(TimelineNode("Re-enviada", formatDateTime(task.endTime), reached = true, nodeColor = CumplrAccent))
+                    add(TimelineNode(
+                        label     = if (currentlyApproved) "Aprobada" else "Pendiente de revisión",
+                        time      = if (currentlyApproved) formatDateTime(task.updatedAt) else null,
+                        reached   = currentlyApproved || task.status == TaskStatus.SUBMITTED || task.status == TaskStatus.UNDER_REVIEW,
+                        nodeColor = if (currentlyApproved) CumplrStatusDoneFg else CumplrAccent,
+                    ))
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun StatusTimeline(task: Task) {
-    val finalReached = task.status == TaskStatus.APPROVED || task.status == TaskStatus.REJECTED
-    val nodes = listOf(
-        TimelineNode("Asignada", formatDateTime(task.createdAt), reached = true,          nodeColor = CumplrFgMuted),
-        TimelineNode("Iniciada", formatDateTime(task.startTime), reached = task.startTime != null, nodeColor = CumplrAccent),
-        TimelineNode("Enviada",  formatDateTime(task.endTime),   reached = task.endTime != null,   nodeColor = CumplrAccent),
-        TimelineNode(
-            label     = when (task.status) { TaskStatus.APPROVED -> "Aprobada"; TaskStatus.REJECTED -> "Rechazada"; else -> "Pendiente de revisión" },
-            time      = if (finalReached) formatDateTime(task.updatedAt) else null,
-            reached   = finalReached,
-            nodeColor = when (task.status) { TaskStatus.APPROVED -> CumplrStatusDoneFg; TaskStatus.REJECTED -> CumplrStatusOverdueFg; else -> CumplrFgSubtle },
-            isLast    = true,
-        ),
-    )
+    val nodes = remember(task) { buildTimelineNodes(task) }
 
     Column(
         modifier = Modifier
@@ -391,6 +445,13 @@ private fun TimelineRow(node: TimelineNode, showConnector: Boolean) {
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                 color = if (node.reached) CumplrFg else CumplrFgSubtle,
             )
+            if (node.subtitle != null) {
+                Text(
+                    text  = "\"${node.subtitle}\"",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CumplrStatusOverdueFg,
+                )
+            }
             if (node.time != null) {
                 Text(node.time, style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
             }
