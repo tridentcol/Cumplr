@@ -463,7 +463,7 @@ class TaskRepositoryImpl @Inject constructor(
                 val session = sessionManager.getSession().first()
                 if (session?.accessToken?.isNotBlank() == true) {
                     val body = json.encodeToString(
-                        CreateTaskBody(taskId, companyId, title, description, location, assignedTo, assignedBy, priority.name, deadline, now, now)
+                        CreateTaskBody(taskId, companyId, title, description, location, assignedTo, assignedBy, "ASSIGNED", priority.name, deadline, now, now)
                     )
                     restClient.postTask(session.accessToken, body)
                 }
@@ -511,11 +511,11 @@ class TaskRepositoryImpl @Inject constructor(
     val location: String?,
     @SerialName("assigned_to") val assignedTo: String,
     @SerialName("assigned_by") val assignedBy: String,
+    val status: String,
     val priority: String,
     val deadline: String?,
     @SerialName("created_at")  val createdAt: String,
     @SerialName("updated_at")  val updatedAt: String,
-    val status: String = "ASSIGNED",
 )
 
 @Serializable private data class ReopenTaskBody(
