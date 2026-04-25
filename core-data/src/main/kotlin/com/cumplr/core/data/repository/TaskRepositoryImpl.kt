@@ -45,6 +45,61 @@ class TaskRepositoryImpl @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** Returns a valid access token, auto-refreshing if expired or expiring within 60 s. */
+    private suspend fun getValidToken(): String? {
+        val session = sessionManager.getSession().first() ?: return null
+        if (session.accessToken.isBlank()) return null
+        if (!restClient.isTokenExpiredOrExpiringSoon(session.accessToken)) return session.accessToken
+        // Token is expired or about to expire — refresh it
+        if (session.refreshToken.isBlank()) return session.accessToken
+        return try {
+            val (newAccess, newRefresh) = restClient.refreshToken(session.refreshToken)
+            sessionManager.updateTokens(newAccess, newRefresh)
+            Log.d(TAG, "Token auto-refreshed")
+            newAccess
+        } catch (e: Exception) {
+            Log.w(TAG, "Token refresh failed: ${e.message}")
+            session.accessToken // fall back to expired token; the REST call may still fail
+        }
+    }
+
+    /**
+     * Retry tasks that were created locally but never reached Supabase.
+     * Only handles truly new tasks (status=ASSIGNED, no start/end time) to
+     * avoid accidentally overwriting PATCH-pending tasks with stale initial data.
+     */
+    private suspend fun retrySyncPending(accessToken: String) {
+        val pending = taskDao.getPendingSync()
+            .filter { it.status == TaskStatus.ASSIGNED.name && it.startTime == null && it.endTime == null }
+        if (pending.isEmpty()) return
+        Log.d(TAG, "retrySyncPending — ${pending.size} unposted tasks")
+        for (entity in pending) {
+            try {
+                val body = json.encodeToString(
+                    CreateTaskBody(
+                        id          = entity.id,
+                        companyId   = entity.companyId,
+                        title       = entity.title,
+                        description = entity.description,
+                        location    = entity.location,
+                        assignedTo  = entity.assignedTo,
+                        assignedBy  = entity.assignedBy,
+                        status      = entity.status,
+                        priority    = entity.priority,
+                        deadline    = entity.deadline,
+                        createdAt   = entity.createdAt,
+                        updatedAt   = entity.updatedAt,
+                    )
+                )
+                restClient.postTask(accessToken, body)
+                taskDao.upsertTask(entity.copy(syncPending = false))
+                Log.d(TAG, "retrySyncPending — posted ${entity.id}")
+            } catch (e: Exception) {
+                Log.w(TAG, "retrySyncPending — still failing ${entity.id}: ${e.message}")
+            }
+        }
+    }
+
     // ── Worker queries ────────────────────────────────────────────────────────
 
     override fun getMyTasks(userId: String): Flow<List<Task>> =
@@ -55,13 +110,13 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun refresh(userId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val session = sessionManager.getSession().first()
+            val token = getValidToken()
                 ?: return@withContext Result.failure(Exception("Sin sesión activa"))
 
             // Snapshot current DB state to detect transitions
             val existing = taskDao.getTasksByAssignedTo(userId).first().associateBy { it.id }
 
-            val dtos = restClient.getTasks(session.accessToken, userId)
+            val dtos = restClient.getTasks(token, userId)
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refresh OK — ${dtos.size} tasks")
 
@@ -199,9 +254,11 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun refreshCompanyTasks(companyId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val session = sessionManager.getSession().first()
+            val token = getValidToken()
                 ?: return@withContext Result.failure(Exception("Sin sesión activa"))
-            val dtos = restClient.getCompanyTasks(session.accessToken, companyId)
+            // Retry any tasks that were created locally but failed to POST to Supabase
+            retrySyncPending(token)
+            val dtos = restClient.getCompanyTasks(token, companyId)
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refreshCompanyTasks OK — ${dtos.size}")
             Result.success(Unit)
@@ -323,9 +380,9 @@ class TaskRepositoryImpl @Inject constructor(
 
     override fun startRealtimeForWorker(userId: String) {
         repoScope.launch {
-            val session = sessionManager.getSession().first() ?: return@launch
+            val token = getValidToken() ?: return@launch
             realtimeClient.connect(
-                accessToken = session.accessToken,
+                accessToken = token,
                 filter      = "assigned_to=eq.$userId",
                 onTask      = { dto -> repoScope.launch { handleRealtimeTask(dto, userId) } },
             )
@@ -334,9 +391,9 @@ class TaskRepositoryImpl @Inject constructor(
 
     override fun startRealtimeForChief(companyId: String) {
         repoScope.launch {
-            val session = sessionManager.getSession().first() ?: return@launch
+            val token = getValidToken() ?: return@launch
             realtimeClient.connect(
-                accessToken = session.accessToken,
+                accessToken = token,
                 filter      = "company_id=eq.$companyId",
                 onTask      = { dto -> repoScope.launch { taskDao.upsertTask(dto.toEntity()) } },
             )
@@ -460,12 +517,16 @@ class TaskRepositoryImpl @Inject constructor(
             taskDao.upsertTask(entity)
             val task = entity.toDomain()
             try {
-                val session = sessionManager.getSession().first()
-                if (session?.accessToken?.isNotBlank() == true) {
+                val token = getValidToken()
+                if (!token.isNullOrBlank()) {
                     val body = json.encodeToString(
                         CreateTaskBody(taskId, companyId, title, description, location, assignedTo, assignedBy, "ASSIGNED", priority.name, deadline, now, now)
                     )
-                    restClient.postTask(session.accessToken, body)
+                    restClient.postTask(token, body)
+                    Log.d(TAG, "createTask posted to Supabase — taskId=$taskId")
+                } else {
+                    Log.w(TAG, "createTask — no valid token, marking syncPending")
+                    taskDao.markSyncPending(taskId)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "createTask sync failed: ${e.message}")
