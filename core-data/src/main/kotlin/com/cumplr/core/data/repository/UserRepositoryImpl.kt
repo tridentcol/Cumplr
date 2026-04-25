@@ -36,6 +36,7 @@ class UserRepositoryImpl @Inject constructor(
                 val dtos = auth.withValidToken { token -> restClient.getCompanyUsers(token, companyId) }
                 dtos.forEach { userDao.upsertUser(it.toEntity()) }
                 Log.d(TAG, "refreshCompanyUsers OK — ${dtos.size} users")
+                Unit
             }.onFailure { Log.w(TAG, "refreshCompanyUsers failed: ${it.message}") }
         }
 }
