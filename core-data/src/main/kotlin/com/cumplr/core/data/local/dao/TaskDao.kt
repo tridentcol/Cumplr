@@ -74,6 +74,9 @@ interface TaskDao {
     @Query("UPDATE tasks SET sync_pending = 1 WHERE id = :taskId")
     suspend fun markSyncPending(taskId: String)
 
+    @Query("UPDATE tasks SET sync_pending = 0 WHERE id = :taskId")
+    suspend fun clearSyncPending(taskId: String)
+
     @Query("""
         UPDATE tasks
         SET status = :status,

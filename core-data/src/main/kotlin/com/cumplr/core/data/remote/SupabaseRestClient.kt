@@ -189,7 +189,11 @@ class SupabaseRestClient @Inject constructor() {
         Log.d(TAG, "▶ POST /rest/v1/tasks  body=${jsonBody.take(200)}")
         val response = http.newCall(request).execute()
         val body = response.body?.string() ?: ""
-        Log.d(TAG, "◀ code=${response.code}")
+        if (response.isSuccessful || response.code == 409) {
+            Log.d(TAG, "◀ POST /tasks code=${response.code}")
+        } else {
+            Log.w(TAG, "◀ POST /tasks FAILED code=${response.code}  body=${body.take(500)}")
+        }
 
         // 409 = primary-key conflict ⇒ row already inserted by a previous attempt.
         // Treat as idempotent success so the retry path can clear the local pending flag.

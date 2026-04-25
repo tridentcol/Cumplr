@@ -36,7 +36,15 @@ class AuthRepositoryImpl @Inject constructor(
                 Log.d(TAG, "Step 2 › GET /rest/v1/users?id=eq.$userId")
                 val userDto: UserDto = restClient.getUserById(accessToken, userId)
                     ?: run {
-                        Log.w(TAG, "Step 2 › 0 rows returned (RLS?) — JWT fallback")
+                        // WARNING: this fallback fires when the 'users' table RLS blocks reading
+                        // the signed-in user's own row (SELECT policy missing or too restrictive).
+                        // The fake "dev-fallback" company_id will cause every subsequent task
+                        // POST to fail with HTTP 400 (invalid UUID). Fix the Supabase RLS policy:
+                        //   CREATE POLICY "users can read own row" ON users
+                        //   FOR SELECT USING (auth.uid() = id);
+                        Log.e(TAG, "Step 2 › getUserById returned null for userId=$userId — " +
+                            "session will use dev-fallback companyId; task creates WILL fail. " +
+                            "Check RLS SELECT policy on the 'users' table.")
                         UserDto(
                             id        = userId,
                             companyId = "dev-fallback",
