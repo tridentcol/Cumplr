@@ -593,9 +593,8 @@ private fun WorkerRow(worker: User, approvalRate: Float?, taskCount: Int) {
 
 // ── Tareas tab ────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
 private fun ChiefTareasTab(
     tasksWithWorkers: List<TaskWithWorker>,
     workers: List<User>,
@@ -626,7 +625,7 @@ private fun ChiefTareasTab(
                 searchQuery.isBlank() ||
                 tw.task.title.contains(searchQuery, ignoreCase = true) ||
                 tw.task.location?.contains(searchQuery, ignoreCase = true) == true ||
-                tw.workerName?.contains(searchQuery, ignoreCase = true) == true
+                tw.worker?.name?.contains(searchQuery, ignoreCase = true) == true
             }
     }
 
@@ -768,7 +767,7 @@ private fun ChiefTareasTab(
                                     assignerName = workerLabel,
                                     onClick      = {},
                                     modifier     = if (isSelected) Modifier.border(2.dp, CumplrAccent, RoundedCornerShape(12.dp)) else Modifier,
-                                    onMenuClick  = if (isSelectionMode) null else { menuExpanded = true },
+                                    onMenuClick  = if (isSelectionMode) null else ({ menuExpanded = true }),
                                 )
                                 if (!isSelectionMode) {
                                     DropdownMenu(
@@ -815,81 +814,15 @@ private fun ChiefTareasTab(
             }
 
             // Bulk action bar
-            var showBulkRejectDialog by remember { mutableStateOf(false) }
-            AnimatedVisibility(
-                visible  = isSelectionMode,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter    = slideInVertically { it },
-                exit     = slideOutVertically { it },
-            ) {
-                androidx.compose.material3.Surface(
-                    shadowElevation = 8.dp,
-                    color           = CumplrSurface,
-                    shape           = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    ) {
-                        Text(
-                            "${selectedTaskIds.size} seleccionada(s)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = CumplrFg,
-                        )
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        ) {
-                            Button(
-                                onClick  = { onBulkApprove(selectedTaskIds) },
-                                modifier = Modifier.weight(1f),
-                                colors   = ButtonDefaults.buttonColors(containerColor = CumplrStatusDoneBg, contentColor = CumplrStatusDoneFg),
-                                shape    = RoundedCornerShape(10.dp),
-                            ) { Text("Aprobar", style = MaterialTheme.typography.labelSmall) }
-                            OutlinedButton(
-                                onClick  = { showBulkRejectDialog = true },
-                                modifier = Modifier.weight(1f),
-                                shape    = RoundedCornerShape(10.dp),
-                                border   = androidx.compose.foundation.BorderStroke(1.dp, CumplrStatusOverdueFg),
-                            ) { Text("Rechazar", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg) }
-                            IconButton(onClick = { onBulkDelete(selectedTaskIds) }) {
-                                Icon(Icons.Outlined.Delete, null, tint = CumplrStatusOverdueFg)
-                            }
-                        }
-                        TextButton(onClick = onClearSelection, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancelar selección", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
-                        }
-                    }
-                }
-            }
-
-            if (showBulkRejectDialog) {
-                var bulkRejectReason by remember { mutableStateOf("") }
-                AlertDialog(
-                    onDismissRequest = { showBulkRejectDialog = false },
-                    title   = { Text("Motivo de rechazo") },
-                    text    = {
-                        androidx.compose.material3.OutlinedTextField(
-                            value         = bulkRejectReason,
-                            onValueChange = { bulkRejectReason = it },
-                            placeholder   = { Text("Describe el motivo…") },
-                            modifier      = Modifier.fillMaxWidth(),
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            if (bulkRejectReason.isNotBlank()) {
-                                onBulkReject(selectedTaskIds, bulkRejectReason)
-                                showBulkRejectDialog = false
-                                bulkRejectReason = ""
-                            }
-                        }) { Text("Rechazar") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showBulkRejectDialog = false }) { Text("Cancelar") }
-                    },
-                )
-            }
+            BulkActionBar(
+                isSelectionMode  = isSelectionMode,
+                selectedTaskIds  = selectedTaskIds,
+                onBulkApprove    = onBulkApprove,
+                onBulkReject     = onBulkReject,
+                onBulkDelete     = onBulkDelete,
+                onClearSelection = onClearSelection,
+                modifier         = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 
@@ -940,6 +873,94 @@ private fun ChiefTareasTab(
             confirmButton   = {},
             dismissButton   = {
                 TextButton(onClick = { reassignTargetId = null }) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+@Composable
+private fun BulkActionBar(
+    isSelectionMode: Boolean,
+    selectedTaskIds: Set<String>,
+    onBulkApprove: (Set<String>) -> Unit,
+    onBulkReject: (Set<String>, String) -> Unit,
+    onBulkDelete: (Set<String>) -> Unit,
+    onClearSelection: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showBulkRejectDialog by remember { mutableStateOf(false) }
+    AnimatedVisibility(
+        visible  = isSelectionMode,
+        modifier = modifier,
+        enter    = slideInVertically { it },
+        exit     = slideOutVertically { it },
+    ) {
+        androidx.compose.material3.Surface(
+            shadowElevation = 8.dp,
+            color           = CumplrSurface,
+            shape           = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        ) {
+            Column(
+                modifier            = Modifier.fillMaxWidth().padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Text(
+                    "${selectedTaskIds.size} seleccionada(s)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = CumplrFg,
+                )
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    Button(
+                        onClick  = { onBulkApprove(selectedTaskIds) },
+                        modifier = Modifier.weight(1f),
+                        colors   = ButtonDefaults.buttonColors(containerColor = CumplrStatusDoneBg, contentColor = CumplrStatusDoneFg),
+                        shape    = RoundedCornerShape(10.dp),
+                    ) { Text("Aprobar", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick  = { showBulkRejectDialog = true },
+                        modifier = Modifier.weight(1f),
+                        shape    = RoundedCornerShape(10.dp),
+                        border   = androidx.compose.foundation.BorderStroke(1.dp, CumplrStatusOverdueFg),
+                    ) { Text("Rechazar", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg) }
+                    IconButton(onClick = { onBulkDelete(selectedTaskIds) }) {
+                        Icon(Icons.Outlined.Delete, null, tint = CumplrStatusOverdueFg)
+                    }
+                }
+                TextButton(onClick = onClearSelection, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancelar selección", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                }
+            }
+        }
+    }
+    if (showBulkRejectDialog) {
+        var bulkRejectReason by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showBulkRejectDialog = false },
+            title   = { Text("Motivo de rechazo") },
+            text    = {
+                androidx.compose.material3.OutlinedTextField(
+                    value         = bulkRejectReason,
+                    onValueChange = { bulkRejectReason = it },
+                    placeholder   = { Text("Describe el motivo…") },
+                    modifier      = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (bulkRejectReason.isNotBlank()) {
+                        onBulkReject(selectedTaskIds, bulkRejectReason)
+                        showBulkRejectDialog = false
+                        bulkRejectReason = ""
+                    }
+                }) { Text("Rechazar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkRejectDialog = false }) { Text("Cancelar") }
             },
         )
     }
