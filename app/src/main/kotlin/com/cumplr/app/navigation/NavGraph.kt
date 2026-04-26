@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.cumplr.app.ui.admin.AdminHomeScreen
 import com.cumplr.app.ui.auth.LoginScreen
 import com.cumplr.app.ui.chief.ChiefHomeScreen
+import com.cumplr.app.ui.chief.ChiefTaskProgressScreen
 import com.cumplr.app.ui.chief.TaskCreateScreen
 import com.cumplr.app.ui.chief.TaskEditScreen
 import com.cumplr.app.ui.chief.TaskReviewScreen
@@ -29,6 +30,7 @@ sealed class CumplrRoute(val route: String) {
     object TaskDetail    : CumplrRoute("task_detail/{taskId}")
     object TaskExecution : CumplrRoute("task_execution/{taskId}")
     object TaskReview    : CumplrRoute("task_review/{taskId}")
+    object TaskProgress  : CumplrRoute("task_progress/{taskId}")
     object TaskEdit      : CumplrRoute("task_edit/{taskId}")
     object TaskSummary   : CumplrRoute("task_summary/{taskId}")
     object ChiefTeam     : CumplrRoute("chief_team")
@@ -121,10 +123,22 @@ fun CumplrNavGraph(navController: NavHostController) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                onTaskReview  = { taskId -> navController.navigate("task_review/$taskId") },
-                onTaskEdit    = { taskId -> navController.navigate("task_edit/$taskId") },
-                onTaskSummary = { taskId -> navController.navigate("task_summary/$taskId") },
-                onAssignTask  = { navController.navigate(CumplrRoute.TaskCreate.route) },
+                onTaskReview    = { taskId -> navController.navigate("task_review/$taskId") },
+                onTaskProgress  = { taskId -> navController.navigate("task_progress/$taskId") },
+                onTaskEdit      = { taskId -> navController.navigate("task_edit/$taskId") },
+                onTaskSummary   = { taskId -> navController.navigate("task_summary/$taskId") },
+                onAssignTask    = { navController.navigate(CumplrRoute.TaskCreate.route) },
+            )
+        }
+
+        composable(
+            route     = CumplrRoute.TaskProgress.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val taskId = backStackEntry.arguments?.getString("taskId") ?: return@composable
+            ChiefTaskProgressScreen(
+                onBack = { navController.popBackStack() },
+                onEdit = { navController.navigate("task_edit/$taskId") },
             )
         }
 

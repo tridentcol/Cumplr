@@ -1,7 +1,6 @@
 package com.cumplr.core.data.remote
 
 import android.util.Log
-import com.cumplr.core.data.remote.dto.NoteDto
 import com.cumplr.core.data.remote.dto.TaskDto
 import com.cumplr.core.data.remote.dto.UserDto
 import kotlinx.serialization.SerialName
@@ -235,40 +234,6 @@ class SupabaseRestClient @Inject constructor() {
         Log.d(TAG, "◀ DELETE code=${response.code}")
 
         if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
-    }
-
-    // ── Notes ─────────────────────────────────────────────────────────────────
-
-    fun getNotes(accessToken: String, taskId: String): List<NoteDto> {
-        val request = Request.Builder()
-            .url("${SupabaseConfig.url}/rest/v1/task_notes?task_id=eq.$taskId&select=*&order=created_at.asc")
-            .get()
-            .header("apikey", SupabaseConfig.anonKey)
-            .header("Authorization", "Bearer $accessToken")
-            .header("Accept", "application/json")
-            .build()
-        Log.d(TAG, "▶ GET /rest/v1/task_notes?task_id=eq.$taskId")
-        val response = http.newCall(request).execute()
-        val body = response.body?.string() ?: ""
-        Log.d(TAG, "◀ GET notes code=${response.code}")
-        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
-        return json.decodeFromString<List<NoteDto>>(body)
-    }
-
-    fun postNote(accessToken: String, jsonBody: String): NoteDto {
-        val request = Request.Builder()
-            .url("${SupabaseConfig.url}/rest/v1/task_notes")
-            .post(jsonBody.toRequestBody(JSON_MT))
-            .header("apikey", SupabaseConfig.anonKey)
-            .header("Authorization", "Bearer $accessToken")
-            .header("Prefer", "return=representation")
-            .build()
-        Log.d(TAG, "▶ POST /rest/v1/task_notes")
-        val response = http.newCall(request).execute()
-        val body = response.body?.string() ?: ""
-        Log.d(TAG, "◀ POST note code=${response.code}")
-        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
-        return json.decodeFromString<List<NoteDto>>(body).first()
     }
 
     // ── Storage ───────────────────────────────────────────────────────────────

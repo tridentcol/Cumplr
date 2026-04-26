@@ -154,6 +154,7 @@ private val CHIEF_NAV_ITEMS = listOf(
 fun ChiefHomeScreen(
     onLogout: () -> Unit,
     onTaskReview: (String) -> Unit,
+    onTaskProgress: (String) -> Unit,
     onTaskEdit: (String) -> Unit,
     onTaskSummary: (String) -> Unit,
     onAssignTask: () -> Unit,
@@ -235,6 +236,7 @@ fun ChiefHomeScreen(
                     isRefreshing      = isRefreshing,
                     onRefresh         = { viewModel.refresh() },
                     onTaskReview      = onTaskReview,
+                    onTaskProgress    = onTaskProgress,
                     onTaskEdit        = onTaskEdit,
                     onTaskSummary     = onTaskSummary,
                     onAssignTask      = onAssignTask,
@@ -599,6 +601,7 @@ private fun ChiefTareasTab(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onTaskReview: (String) -> Unit,
+    onTaskProgress: (String) -> Unit,
     onTaskEdit: (String) -> Unit,
     onTaskSummary: (String) -> Unit,
     onAssignTask: () -> Unit,
@@ -755,8 +758,9 @@ private fun ChiefTareasTab(
                                         if (isSelectionMode) onToggleSelection(tw.task.id)
                                         else when (tw.task.status) {
                                             TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
-                                            TaskStatus.APPROVED, TaskStatus.REJECTED       -> onTaskSummary(tw.task.id)
-                                            else                                            -> onTaskEdit(tw.task.id)
+                                            TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS   -> onTaskProgress(tw.task.id)
+                                            TaskStatus.APPROVED, TaskStatus.REJECTED      -> onTaskSummary(tw.task.id)
+                                            else                                           -> onTaskProgress(tw.task.id)
                                         }
                                     },
                                     onLongClick  = { onToggleSelection(tw.task.id) },

@@ -4,10 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.domain.enums.TaskStatus
-import com.cumplr.core.domain.model.Note
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.model.User
-import com.cumplr.core.domain.repository.NoteRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +32,6 @@ class TaskReviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val taskRepository: TaskRepository,
     private val userRepository: UserRepository,
-    private val noteRepository: NoteRepository,
 ) : ViewModel() {
 
     val taskId: String = checkNotNull(savedStateHandle["taskId"])
@@ -45,12 +42,6 @@ class TaskReviewViewModel @Inject constructor(
     val worker: StateFlow<User?> = task.flatMapLatest { t ->
         if (t != null) userRepository.getUser(t.assignedTo) else flowOf(null)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    val notes: StateFlow<List<Note>> = noteRepository.getNotes(taskId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    private val _isAddingNote = MutableStateFlow(false)
-    val isAddingNote: StateFlow<Boolean> = _isAddingNote.asStateFlow()
 
     private val _uiState = MutableStateFlow<ReviewUiState>(ReviewUiState.Idle)
     val uiState: StateFlow<ReviewUiState> = _uiState.asStateFlow()
@@ -72,14 +63,6 @@ class TaskReviewViewModel @Inject constructor(
                 onSuccess = { ReviewUiState.Success },
                 onFailure = { ReviewUiState.Error(it.message ?: "Error al aprobar") },
             )
-        }
-    }
-
-    fun addNote(text: String) {
-        viewModelScope.launch {
-            _isAddingNote.value = true
-            noteRepository.addNote(taskId, text)
-            _isAddingNote.value = false
         }
     }
 
