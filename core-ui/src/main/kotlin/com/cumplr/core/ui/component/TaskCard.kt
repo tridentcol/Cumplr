@@ -2,7 +2,9 @@ package com.cumplr.core.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -54,6 +56,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskCard(
     task: Task,
@@ -61,6 +64,7 @@ fun TaskCard(
     modifier: Modifier = Modifier,
     assignerName: String? = null,
     onMenuClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -75,7 +79,17 @@ fun TaskCard(
             .height(IntrinsicSize.Min)
             .clip(RoundedCornerShape(Radius.lg))
             .background(bgColor)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+            .then(
+                if (onLongClick != null)
+                    Modifier.combinedClickable(
+                        interactionSource = interactionSource,
+                        indication        = null,
+                        onClick           = onClick,
+                        onLongClick       = onLongClick,
+                    )
+                else
+                    Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            ),
     ) {
         // Priority indicator strip
         Box(
