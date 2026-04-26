@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.cumplr.core.data.local.CumplrDatabase
 import com.cumplr.core.data.local.MIGRATION_1_2
+import com.cumplr.core.data.local.MIGRATION_2_3
 import com.cumplr.core.data.repository.AuthRepositoryImpl
 import com.cumplr.core.data.repository.NotificationRepositoryImpl
 import com.cumplr.core.data.repository.StorageRepositoryImpl
@@ -46,7 +47,7 @@ abstract class DataModule {
         @Provides @Singleton
         fun provideDatabase(@ApplicationContext context: Context): CumplrDatabase =
             Room.databaseBuilder(context, CumplrDatabase::class.java, "cumplr.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         @Provides @Singleton

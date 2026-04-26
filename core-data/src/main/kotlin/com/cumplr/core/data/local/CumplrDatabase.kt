@@ -19,6 +19,15 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tasks ADD COLUMN pending_sync_op TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_company_id ON tasks (company_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_assigned_to ON tasks (assigned_to)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_sync_pending ON tasks (sync_pending)")
+    }
+}
+
 @Database(
     entities = [
         CompanyEntity::class,
@@ -27,7 +36,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         TaskEventEntity::class,
         NotificationEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class CumplrDatabase : RoomDatabase() {

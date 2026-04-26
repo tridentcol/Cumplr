@@ -219,6 +219,23 @@ class SupabaseRestClient @Inject constructor() {
         if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
     }
 
+    fun deleteTask(accessToken: String, taskId: String) {
+        val request = Request.Builder()
+            .url("${SupabaseConfig.url}/rest/v1/tasks?id=eq.$taskId")
+            .delete()
+            .header("apikey", SupabaseConfig.anonKey)
+            .header("Authorization", "Bearer $accessToken")
+            .header("Prefer", "return=minimal")
+            .build()
+
+        Log.d(TAG, "▶ DELETE /rest/v1/tasks?id=eq.$taskId")
+        val response = http.newCall(request).execute()
+        val body = response.body?.string() ?: ""
+        Log.d(TAG, "◀ DELETE code=${response.code}")
+
+        if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $body")
+    }
+
     // ── Storage ───────────────────────────────────────────────────────────────
 
     fun uploadFile(accessToken: String, bucket: String, path: String, bytes: ByteArray): String {

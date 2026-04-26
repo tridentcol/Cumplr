@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.domain.model.AppNotification
 import com.cumplr.core.domain.model.Task
+import com.cumplr.core.data.session.AuthEvent
+import com.cumplr.core.data.session.AuthEventBus
 import com.cumplr.core.domain.repository.AuthRepository
 import com.cumplr.core.domain.repository.NotificationRepository
 import com.cumplr.core.domain.repository.TaskRepository
@@ -30,6 +32,7 @@ class WorkerHomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val taskRepository: TaskRepository,
     private val notificationRepository: NotificationRepository,
+    private val authEventBus: AuthEventBus,
 ) : ViewModel() {
 
     private val _didLogOut    = MutableStateFlow(false)
@@ -69,6 +72,11 @@ class WorkerHomeViewModel @Inject constructor(
     private var pollingJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            authEventBus.events.collect { event ->
+                if (event is AuthEvent.SessionExpired) _didLogOut.value = true
+            }
+        }
         viewModelScope.launch {
             val session = authRepository.getCurrentSession().first()
             if (session != null) {
@@ -113,6 +121,13 @@ class WorkerHomeViewModel @Inject constructor(
         viewModelScope.launch {
             val session = authRepository.getCurrentSession().first() ?: return@launch
             notificationRepository.markAllRead(session.userId)
+        }
+    }
+
+    fun clearAllNotifications() {
+        viewModelScope.launch {
+            val session = authRepository.getCurrentSession().first() ?: return@launch
+            notificationRepository.clearAll(session.userId)
         }
     }
 

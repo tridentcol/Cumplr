@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -86,12 +87,29 @@ import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.CumplrSurface3
 import com.cumplr.core.ui.theme.Spacing
 import java.time.Duration
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+
+private enum class WorkerDateFilter { ALL, TODAY, WEEK, MONTH }
+
+private fun Task.matchesWorkerDateFilter(filter: WorkerDateFilter): Boolean {
+    if (filter == WorkerDateFilter.ALL) return true
+    val d = deadline?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        ?: return false
+    val today = LocalDate.now()
+    return when (filter) {
+        WorkerDateFilter.TODAY -> d == today
+        WorkerDateFilter.WEEK  -> !d.isBefore(today.with(DayOfWeek.MONDAY)) && !d.isAfter(today.with(DayOfWeek.SUNDAY))
+        WorkerDateFilter.MONTH -> d.month == today.month && d.year == today.year
+        WorkerDateFilter.ALL   -> true
+    }
+}
 
 private val ACTIVE_STATUSES  = setOf(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.REJECTED)
 private val HISTORY_STATUSES = setOf(TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW, TaskStatus.APPROVED)
@@ -178,6 +196,7 @@ fun WorkerHomeScreen(
                         notifications = notifications,
                         onMarkRead    = { viewModel.markNotificationRead(it) },
                         onMarkAllRead = { viewModel.markAllNotificationsRead() },
+                        onClearAll    = { viewModel.clearAllNotifications() },
                         onTaskClick   = { taskId ->
                             val task = tasks.find { it.id == taskId }
                             if (task != null && task.status in HISTORY_STATUSES) onHistoryTaskClick(taskId)
@@ -385,8 +404,13 @@ private fun WorkerTareasTab(
     onTaskClick: (String) -> Unit,
     onHistoryTaskClick: (String) -> Unit,
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val filteredTasks = remember(tasks, selectedTab) { tasks.filter(TASK_TABS[selectedTab].filter) }
+    var selectedTab  by remember { mutableIntStateOf(0) }
+    var dateFilter   by remember { mutableStateOf(WorkerDateFilter.ALL) }
+    val filteredTasks = remember(tasks, selectedTab, dateFilter) {
+        tasks
+            .filter(TASK_TABS[selectedTab].filter)
+            .filter { it.matchesWorkerDateFilter(dateFilter) }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScrollableTabRow(
@@ -426,6 +450,21 @@ private fun WorkerTareasTab(
             }
         }
 
+        // Date filter chips
+        Row(
+            modifier              = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            listOf(WorkerDateFilter.ALL to "Todos", WorkerDateFilter.TODAY to "Hoy",
+                   WorkerDateFilter.WEEK to "Semana", WorkerDateFilter.MONTH to "Mes").forEach { (f, label) ->
+                FilterChip(
+                    selected = dateFilter == f,
+                    onClick  = { dateFilter = f },
+                    label    = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+
         PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
             when {
                 isLoading -> SkeletonList()
@@ -459,6 +498,7 @@ private fun WorkerNotificationsTab(
     notifications: List<AppNotification>,
     onMarkRead: (String) -> Unit,
     onMarkAllRead: () -> Unit,
+    onClearAll: () -> Unit,
     onTaskClick: (String) -> Unit,
 ) {
     val unread = notifications.count { !it.read }
@@ -473,9 +513,19 @@ private fun WorkerNotificationsTab(
             verticalAlignment     = Alignment.CenterVertically,
         ) {
             Text("Notificaciones", style = MaterialTheme.typography.titleMedium, color = CumplrFg)
-            if (unread > 0) {
-                TextButton(onClick = onMarkAllRead) {
-                    Text("Marcar todo como leído", style = MaterialTheme.typography.labelSmall, color = CumplrAccent)
+            if (notifications.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    if (unread > 0) {
+                        TextButton(onClick = onMarkAllRead) {
+                            Text("Marcar todo leído", style = MaterialTheme.typography.labelSmall, color = CumplrAccent)
+                        }
+                    }
+                    TextButton(
+                        onClick = onClearAll,
+                        colors  = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text("Limpiar todo", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
