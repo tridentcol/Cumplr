@@ -8,6 +8,7 @@ import com.cumplr.core.domain.model.User
 import com.cumplr.core.data.session.AuthEvent
 import com.cumplr.core.data.session.AuthEventBus
 import com.cumplr.core.domain.repository.AuthRepository
+import java.time.LocalDate
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -30,6 +32,7 @@ import javax.inject.Inject
 private const val POLL_INTERVAL_MS = 30_000L
 
 data class TaskWithWorker(val task: Task, val worker: User?)
+data class WorkerMetric(val worker: User, val approvalRate: Float, val taskCount: Int)
 
 @HiltViewModel
 class ChiefHomeViewModel @Inject constructor(
@@ -82,6 +85,38 @@ class ChiefHomeViewModel @Inject constructor(
     val pendingReviewCount: StateFlow<Int> = tasks
         .map { list -> list.count { it.status == TaskStatus.SUBMITTED || it.status == TaskStatus.UNDER_REVIEW } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val approvedThisMonthCount: StateFlow<Int> = tasks
+        .map { list ->
+            val now = LocalDate.now()
+            list.count { task ->
+                task.status == TaskStatus.APPROVED &&
+                runCatching {
+                    val d = LocalDate.parse(task.updatedAt.take(10))
+                    d.month == now.month && d.year == now.year
+                }.getOrElse { false }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val topWorkers: StateFlow<List<WorkerMetric>> = combine(tasks, workers) { taskList, userList ->
+        userList.mapNotNull { user ->
+            val userTasks = taskList.filter { it.assignedTo == user.id }
+            val finished = userTasks.count { it.status == TaskStatus.APPROVED || it.status == TaskStatus.REJECTED }
+            if (finished == 0) return@mapNotNull null
+            val approved = userTasks.count { it.status == TaskStatus.APPROVED }
+            WorkerMetric(user, approved.toFloat() / finished, userTasks.size)
+        }
+        .sortedByDescending { it.approvalRate }
+        .take(3)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _selectedTaskIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedTaskIds: StateFlow<Set<String>> = _selectedTaskIds.asStateFlow()
+
+    val isSelectionMode: StateFlow<Boolean> = _selectedTaskIds
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private var pollingJob: Job? = null
 
@@ -147,6 +182,42 @@ class ChiefHomeViewModel @Inject constructor(
     }
 
     fun clearError() { _errorMessage.value = null }
+
+    fun toggleSelection(taskId: String) {
+        _selectedTaskIds.update { if (taskId in it) it - taskId else it + taskId }
+    }
+
+    fun clearSelection() { _selectedTaskIds.value = emptySet() }
+
+    fun bulkApprove(ids: Set<String>) {
+        viewModelScope.launch {
+            ids.forEach { taskId ->
+                taskRepository.approveTask(taskId, null)
+                    .onFailure { _errorMessage.value = "Error al aprobar algunas tareas" }
+            }
+            clearSelection()
+        }
+    }
+
+    fun bulkReject(ids: Set<String>, reason: String) {
+        viewModelScope.launch {
+            ids.forEach { taskId ->
+                taskRepository.rejectTask(taskId, reason)
+                    .onFailure { _errorMessage.value = "Error al rechazar algunas tareas" }
+            }
+            clearSelection()
+        }
+    }
+
+    fun bulkDelete(ids: Set<String>) {
+        viewModelScope.launch {
+            ids.forEach { taskId ->
+                taskRepository.deleteTask(taskId)
+                    .onFailure { _errorMessage.value = "Error al eliminar algunas tareas" }
+            }
+            clearSelection()
+        }
+    }
 
     fun signOut() {
         viewModelScope.launch {

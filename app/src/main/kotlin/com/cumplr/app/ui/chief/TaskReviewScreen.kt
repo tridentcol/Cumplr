@@ -80,9 +80,11 @@ fun TaskReviewScreen(
     onSuccess: () -> Unit,
     viewModel: TaskReviewViewModel = hiltViewModel(),
 ) {
-    val task    by viewModel.task.collectAsStateWithLifecycle()
-    val worker  by viewModel.worker.collectAsStateWithLifecycle()
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val task         by viewModel.task.collectAsStateWithLifecycle()
+    val worker       by viewModel.worker.collectAsStateWithLifecycle()
+    val uiState      by viewModel.uiState.collectAsStateWithLifecycle()
+    val notes        by viewModel.notes.collectAsStateWithLifecycle()
+    val isAddingNote by viewModel.isAddingNote.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState) {
         if (uiState is ReviewUiState.Success) onSuccess()
@@ -108,11 +110,14 @@ fun TaskReviewScreen(
                     },
                 )
                 ReviewContent(
-                    task           = t,
-                    worker         = worker,
-                    uiState        = uiState,
-                    onApprove      = { feedback -> viewModel.approve(feedback) },
-                    onRejectClick  = { showRejectSheet = true },
+                    task         = t,
+                    worker       = worker,
+                    uiState      = uiState,
+                    notes        = notes,
+                    isAddingNote = isAddingNote,
+                    onApprove    = { feedback -> viewModel.approve(feedback) },
+                    onRejectClick = { showRejectSheet = true },
+                    onAddNote    = { viewModel.addNote(it) },
                 )
             }
         }
@@ -135,8 +140,11 @@ private fun ReviewContent(
     task: Task,
     worker: User?,
     uiState: ReviewUiState,
+    notes: List<com.cumplr.core.domain.model.Note>,
+    isAddingNote: Boolean,
     onApprove: (String) -> Unit,
     onRejectClick: () -> Unit,
+    onAddNote: (String) -> Unit,
 ) {
     var feedback by remember { mutableStateOf("") }
 
@@ -205,6 +213,13 @@ private fun ReviewContent(
                 )
             }
         }
+
+        // Notes
+        com.cumplr.app.ui.common.NotesSection(
+            notes        = notes,
+            onAddNote    = onAddNote,
+            isSubmitting = isAddingNote,
+        )
 
         // Chief feedback
         OutlinedTextField(
