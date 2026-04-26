@@ -473,6 +473,7 @@ class TaskRepositoryImpl @Inject constructor(
             taskDao.deleteTask(taskId)
             auth.withValidToken { token -> restClient.deleteTask(token, taskId) }
             Log.d(TAG, "deleteTask OK — $taskId")
+            Unit
         }
     }
 
@@ -488,6 +489,7 @@ class TaskRepositoryImpl @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "markUnderReview sync failed: ${e.message}")
             }
+            Unit
         }
     }
 
@@ -505,6 +507,7 @@ class TaskRepositoryImpl @Inject constructor(
                 } catch (e: Exception) {
                     Log.w(TAG, "reassignTask sync failed: ${e.message}")
                 }
+                Unit
             }
         }
 
