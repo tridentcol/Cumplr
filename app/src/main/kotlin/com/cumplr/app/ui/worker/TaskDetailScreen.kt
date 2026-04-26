@@ -72,6 +72,8 @@ fun TaskDetailScreen(
 ) {
     val task         by viewModel.task.collectAsStateWithLifecycle()
     val assignerName by viewModel.assignerName.collectAsStateWithLifecycle()
+    val notes        by viewModel.notes.collectAsStateWithLifecycle()
+    val isAddingNote by viewModel.isAddingNote.collectAsStateWithLifecycle()
 
     Surface(modifier = Modifier.fillMaxSize(), color = CumplrBackground) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
@@ -93,7 +95,10 @@ fun TaskDetailScreen(
                 TaskDetailContent(
                     task         = t,
                     assignerName = assignerName,
+                    notes        = notes,
+                    isAddingNote = isAddingNote,
                     onStartTask  = { onNavigateToExecution(t.id) },
+                    onAddNote    = { viewModel.addNote(it) },
                 )
             }
         }
@@ -101,7 +106,14 @@ fun TaskDetailScreen(
 }
 
 @Composable
-private fun TaskDetailContent(task: Task, assignerName: String?, onStartTask: () -> Unit) {
+private fun TaskDetailContent(
+    task: Task,
+    assignerName: String?,
+    notes: List<com.cumplr.core.domain.model.Note>,
+    isAddingNote: Boolean,
+    onStartTask: () -> Unit,
+    onAddNote: (String) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -277,6 +289,13 @@ private fun TaskDetailContent(task: Task, assignerName: String?, onStartTask: ()
                 }
             }
         }
+
+        // ── Notes ────────────────────────────────────────────────────────────
+        com.cumplr.app.ui.common.NotesSection(
+            notes        = notes,
+            onAddNote    = onAddNote,
+            isSubmitting = isAddingNote,
+        )
 
         Spacer(Modifier.height(Spacing.sm))
 

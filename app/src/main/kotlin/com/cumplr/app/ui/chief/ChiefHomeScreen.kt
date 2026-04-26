@@ -26,15 +26,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,10 +64,15 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,10 +105,13 @@ import com.cumplr.core.ui.theme.CumplrAccentInk
 import com.cumplr.core.ui.theme.CumplrBackground
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
+import com.cumplr.core.ui.theme.CumplrStatusDoneBg
 import com.cumplr.core.ui.theme.CumplrStatusDoneFg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
+import com.cumplr.core.ui.theme.CumplrStatusSubmittedFg
+import com.cumplr.core.ui.theme.CumplrBorder
 import com.cumplr.core.ui.theme.CumplrFgSubtle
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
@@ -128,10 +144,11 @@ private val CHIEF_TASK_TABS = listOf(
 )
 
 private val CHIEF_NAV_ITEMS = listOf(
-    CumplrNavItem("inicio",   Icons.Outlined.Home,        "Inicio"),
-    CumplrNavItem("equipo",   Icons.Outlined.Group,       "Equipo"),
-    CumplrNavItem("tareas",   Icons.Outlined.CheckCircle, "Tareas"),
-    CumplrNavItem("perfil",   Icons.Outlined.Person,      "Perfil"),
+    CumplrNavItem("inicio",     Icons.Outlined.Home,        "Inicio"),
+    CumplrNavItem("equipo",     Icons.Outlined.Group,       "Equipo"),
+    CumplrNavItem("tareas",     Icons.Outlined.CheckCircle, "Tareas"),
+    CumplrNavItem("dashboard",  Icons.Outlined.BarChart,    "Stats"),
+    CumplrNavItem("perfil",     Icons.Outlined.Person,      "Perfil"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,8 +170,12 @@ fun ChiefHomeScreen(
     val activeWorkersCount by viewModel.activeWorkersCount.collectAsStateWithLifecycle()
     val chiefName          by viewModel.chiefName.collectAsStateWithLifecycle()
     val workers            by viewModel.workers.collectAsStateWithLifecycle()
-    val pendingReviewCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
-    val errorMessage       by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val pendingReviewCount    by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val approvedThisMonth     by viewModel.approvedThisMonthCount.collectAsStateWithLifecycle()
+    val topWorkers            by viewModel.topWorkers.collectAsStateWithLifecycle()
+    val selectedTaskIds       by viewModel.selectedTaskIds.collectAsStateWithLifecycle()
+    val isSelectionMode       by viewModel.isSelectionMode.collectAsStateWithLifecycle()
+    val errorMessage          by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope             = rememberCoroutineScope()
@@ -211,16 +232,31 @@ fun ChiefHomeScreen(
                 )
                 "equipo" -> ChiefEquipoTab(workers = workers, tasksWithWorkers = tasksWithWorkers)
                 "tareas" -> ChiefTareasTab(
-                    tasksWithWorkers = tasksWithWorkers,
-                    workers          = workers,
-                    isRefreshing     = isRefreshing,
-                    onRefresh        = { viewModel.refresh() },
-                    onTaskReview     = onTaskReview,
-                    onTaskEdit       = onTaskEdit,
-                    onTaskSummary    = onTaskSummary,
-                    onAssignTask     = onAssignTask,
-                    onDeleteTask     = { viewModel.deleteTask(it) },
-                    onReassignTask   = { taskId, workerId -> viewModel.reassignTask(taskId, workerId) },
+                    tasksWithWorkers  = tasksWithWorkers,
+                    workers           = workers,
+                    isRefreshing      = isRefreshing,
+                    onRefresh         = { viewModel.refresh() },
+                    onTaskReview      = onTaskReview,
+                    onTaskEdit        = onTaskEdit,
+                    onTaskSummary     = onTaskSummary,
+                    onAssignTask      = onAssignTask,
+                    onDeleteTask      = { viewModel.deleteTask(it) },
+                    onReassignTask    = { taskId, workerId -> viewModel.reassignTask(taskId, workerId) },
+                    selectedTaskIds   = selectedTaskIds,
+                    isSelectionMode   = isSelectionMode,
+                    onToggleSelection = { viewModel.toggleSelection(it) },
+                    onClearSelection  = { viewModel.clearSelection() },
+                    onBulkApprove     = { viewModel.bulkApprove(it) },
+                    onBulkReject      = { ids, reason -> viewModel.bulkReject(ids, reason) },
+                    onBulkDelete      = { viewModel.bulkDelete(it) },
+                )
+                "dashboard" -> ChiefDashboardTab(
+                    activeTasksCount  = activeTasksCount,
+                    overdueCount      = overdueCount,
+                    pendingReview     = pendingReviewCount,
+                    approvedThisMonth = approvedThisMonth,
+                    topWorkers        = topWorkers,
+                    tasksWithWorkers  = tasksWithWorkers,
                 )
                 "perfil" -> ChiefPerfilTab(
                     name     = chiefName,
@@ -559,6 +595,7 @@ private fun WorkerRow(worker: User, approvalRate: Float?, taskCount: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ChiefTareasTab(
     tasksWithWorkers: List<TaskWithWorker>,
     workers: List<User>,
@@ -570,6 +607,13 @@ private fun ChiefTareasTab(
     onAssignTask: () -> Unit,
     onDeleteTask: (String) -> Unit,
     onReassignTask: (String, String) -> Unit,
+    selectedTaskIds: Set<String>,
+    isSelectionMode: Boolean,
+    onToggleSelection: (String) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkApprove: (Set<String>) -> Unit,
+    onBulkReject: (Set<String>, String) -> Unit,
+    onBulkDelete: (Set<String>) -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var dateFilter  by remember { mutableStateOf(DateFilter.ALL) }
@@ -704,41 +748,51 @@ private fun ChiefTareasTab(
                             val workerLabel = tw.worker?.let { w ->
                                 if (w.position != null) "${w.position} · ${w.name}" else w.name
                             }
+                            val isSelected = tw.task.id in selectedTaskIds
                             var menuExpanded by remember { mutableStateOf(false) }
-                            Box {
-                                TaskCard(
-                                    task         = tw.task,
-                                    assignerName = workerLabel,
-                                    onClick      = {
-                                        when (tw.task.status) {
+                            Box(
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {
+                                        if (isSelectionMode) onToggleSelection(tw.task.id)
+                                        else when (tw.task.status) {
                                             TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
                                             TaskStatus.APPROVED, TaskStatus.REJECTED       -> onTaskSummary(tw.task.id)
                                             else                                            -> onTaskEdit(tw.task.id)
                                         }
                                     },
-                                    onMenuClick  = { menuExpanded = true },
+                                    onLongClick = { onToggleSelection(tw.task.id) },
+                                ),
+                            ) {
+                                TaskCard(
+                                    task         = tw.task,
+                                    assignerName = workerLabel,
+                                    onClick      = {},
+                                    modifier     = if (isSelected) Modifier.border(2.dp, CumplrAccent, RoundedCornerShape(12.dp)) else Modifier,
+                                    onMenuClick  = if (isSelectionMode) null else { menuExpanded = true },
                                 )
-                                DropdownMenu(
-                                    expanded         = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text        = { Text("Eliminar") },
-                                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                        onClick     = {
-                                            menuExpanded = false
-                                            deleteTargetId = tw.task.id
-                                        },
-                                    )
-                                    if (tw.task.status == TaskStatus.ASSIGNED) {
+                                if (!isSelectionMode) {
+                                    DropdownMenu(
+                                        expanded         = menuExpanded,
+                                        onDismissRequest = { menuExpanded = false },
+                                    ) {
                                         DropdownMenuItem(
-                                            text        = { Text("Reasignar") },
-                                            leadingIcon = { Icon(Icons.Outlined.PersonAdd, null) },
+                                            text        = { Text("Eliminar") },
+                                            leadingIcon = { Icon(Icons.Outlined.Delete, null) },
                                             onClick     = {
                                                 menuExpanded = false
-                                                reassignTargetId = tw.task.id
+                                                deleteTargetId = tw.task.id
                                             },
                                         )
+                                        if (tw.task.status == TaskStatus.ASSIGNED) {
+                                            DropdownMenuItem(
+                                                text        = { Text("Reasignar") },
+                                                leadingIcon = { Icon(Icons.Outlined.PersonAdd, null) },
+                                                onClick     = {
+                                                    menuExpanded = false
+                                                    reassignTargetId = tw.task.id
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -747,16 +801,95 @@ private fun ChiefTareasTab(
                 }
             }
 
-            ExtendedFloatingActionButton(
-                onClick        = onAssignTask,
-                modifier       = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(Spacing.lg),
-                containerColor = CumplrAccent,
-                contentColor   = CumplrAccentInk,
-                icon           = { Icon(Icons.Outlined.Add, "Asignar tarea") },
-                text           = { Text("Asignar", style = MaterialTheme.typography.labelLarge) },
-            )
+            if (!isSelectionMode) {
+                ExtendedFloatingActionButton(
+                    onClick        = onAssignTask,
+                    modifier       = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(Spacing.lg),
+                    containerColor = CumplrAccent,
+                    contentColor   = CumplrAccentInk,
+                    icon           = { Icon(Icons.Outlined.Add, "Asignar tarea") },
+                    text           = { Text("Asignar", style = MaterialTheme.typography.labelLarge) },
+                )
+            }
+
+            // Bulk action bar
+            var showBulkRejectDialog by remember { mutableStateOf(false) }
+            AnimatedVisibility(
+                visible  = isSelectionMode,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter    = slideInVertically { it },
+                exit     = slideOutVertically { it },
+            ) {
+                androidx.compose.material3.Surface(
+                    shadowElevation = 8.dp,
+                    color           = CumplrSurface,
+                    shape           = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        Text(
+                            "${selectedTaskIds.size} seleccionada(s)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = CumplrFg,
+                        )
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        ) {
+                            Button(
+                                onClick  = { onBulkApprove(selectedTaskIds) },
+                                modifier = Modifier.weight(1f),
+                                colors   = ButtonDefaults.buttonColors(containerColor = CumplrStatusDoneBg, contentColor = CumplrStatusDoneFg),
+                                shape    = RoundedCornerShape(10.dp),
+                            ) { Text("Aprobar", style = MaterialTheme.typography.labelSmall) }
+                            OutlinedButton(
+                                onClick  = { showBulkRejectDialog = true },
+                                modifier = Modifier.weight(1f),
+                                shape    = RoundedCornerShape(10.dp),
+                                border   = androidx.compose.foundation.BorderStroke(1.dp, CumplrStatusOverdueFg),
+                            ) { Text("Rechazar", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg) }
+                            IconButton(onClick = { onBulkDelete(selectedTaskIds) }) {
+                                Icon(Icons.Outlined.Delete, null, tint = CumplrStatusOverdueFg)
+                            }
+                        }
+                        TextButton(onClick = onClearSelection, modifier = Modifier.fillMaxWidth()) {
+                            Text("Cancelar selección", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                        }
+                    }
+                }
+            }
+
+            if (showBulkRejectDialog) {
+                var bulkRejectReason by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showBulkRejectDialog = false },
+                    title   = { Text("Motivo de rechazo") },
+                    text    = {
+                        androidx.compose.material3.OutlinedTextField(
+                            value         = bulkRejectReason,
+                            onValueChange = { bulkRejectReason = it },
+                            placeholder   = { Text("Describe el motivo…") },
+                            modifier      = Modifier.fillMaxWidth(),
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            if (bulkRejectReason.isNotBlank()) {
+                                onBulkReject(selectedTaskIds, bulkRejectReason)
+                                showBulkRejectDialog = false
+                                bulkRejectReason = ""
+                            }
+                        }) { Text("Rechazar") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBulkRejectDialog = false }) { Text("Cancelar") }
+                    },
+                )
+            }
         }
     }
 
@@ -865,5 +998,143 @@ private fun ChiefPerfilTab(name: String, onLogout: () -> Unit) {
             Spacer(Modifier.width(Spacing.sm))
             Text("Cerrar sesión", style = MaterialTheme.typography.labelLarge)
         }
+    }
+}
+
+// ── Dashboard tab ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun ChiefDashboardTab(
+    activeTasksCount: Int,
+    overdueCount: Int,
+    pendingReview: Int,
+    approvedThisMonth: Int,
+    topWorkers: List<WorkerMetric>,
+    tasksWithWorkers: List<TaskWithWorker>,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Text("Resumen del equipo", style = MaterialTheme.typography.titleMedium, color = CumplrFg)
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            DashMetricCard(Modifier.weight(1f), "Activas",      "$activeTasksCount", CumplrFg)
+            DashMetricCard(Modifier.weight(1f), "Vencidas",     "$overdueCount",
+                if (overdueCount > 0) CumplrStatusOverdueFg else CumplrFg)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            DashMetricCard(Modifier.weight(1f), "En revisión",       "$pendingReview",     CumplrStatusProgressFg)
+            DashMetricCard(Modifier.weight(1f), "Aprobadas (mes)",   "$approvedThisMonth", CumplrStatusDoneFg)
+        }
+
+        Spacer(Modifier.height(Spacing.xs))
+        Text("Distribución de tareas", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+        TaskDistributionChart(tasksWithWorkers)
+
+        if (topWorkers.isNotEmpty()) {
+            Spacer(Modifier.height(Spacing.xs))
+            Text("Top trabajadores", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+            topWorkers.forEachIndexed { idx, wm -> TopWorkerRow(idx + 1, wm) }
+        }
+    }
+}
+
+@Composable
+private fun DashMetricCard(modifier: Modifier = Modifier, label: String, value: String, valueColor: Color = CumplrFg) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrSurface)
+            .padding(Spacing.md),
+    ) {
+        Text(value, style = MaterialTheme.typography.headlineSmall, color = valueColor)
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+    }
+}
+
+@Composable
+private fun TaskDistributionChart(tasksWithWorkers: List<TaskWithWorker>) {
+    val bars = listOf(
+        "Asignadas"  to tasksWithWorkers.count { it.task.status == TaskStatus.ASSIGNED },
+        "En curso"   to tasksWithWorkers.count { it.task.status == TaskStatus.IN_PROGRESS },
+        "Revisión"   to tasksWithWorkers.count { it.task.status == TaskStatus.SUBMITTED || it.task.status == TaskStatus.UNDER_REVIEW },
+        "Aprobadas"  to tasksWithWorkers.count { it.task.status == TaskStatus.APPROVED },
+        "Rechazadas" to tasksWithWorkers.count { it.task.status == TaskStatus.REJECTED },
+    )
+    val barColors = listOf(CumplrStatusProgressFg, CumplrAccent, CumplrStatusSubmittedFg, CumplrStatusDoneFg, CumplrStatusOverdueFg)
+    val maxVal = bars.maxOfOrNull { it.second }.takeIf { it != null && it > 0 } ?: 1
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(148.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrSurface)
+            .padding(Spacing.md),
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 20.dp)) {
+            val gap      = 8.dp.toPx()
+            val barWidth = (size.width - gap * (bars.size - 1)) / bars.size
+            bars.forEachIndexed { idx, (_, count) ->
+                val barH = (count.toFloat() / maxVal) * size.height
+                val left = idx * (barWidth + gap)
+                drawRect(
+                    color   = barColors[idx],
+                    topLeft = Offset(left, size.height - barH),
+                    size    = Size(barWidth, barH),
+                    alpha   = 0.85f,
+                )
+            }
+        }
+        Row(
+            modifier              = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            bars.forEachIndexed { idx, (label, count) ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier            = Modifier.weight(1f),
+                ) {
+                    Text("$count", style = MaterialTheme.typography.labelSmall, color = barColors[idx])
+                    Text(label, style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                        color = CumplrFgMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopWorkerRow(rank: Int, metric: WorkerMetric) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CumplrSurface)
+            .padding(Spacing.md),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
+        Text("#$rank", style = MaterialTheme.typography.titleMedium, color = CumplrAccent,
+            modifier = Modifier.width(28.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(metric.worker.name, style = MaterialTheme.typography.bodyMedium, color = CumplrFg,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${metric.taskCount} tareas", style = MaterialTheme.typography.bodySmall, color = CumplrFgMuted)
+        }
+        Text(
+            text  = "${(metric.approvalRate * 100).toInt()}%",
+            style = MaterialTheme.typography.titleSmall,
+            color = when {
+                metric.approvalRate >= 0.8f -> CumplrStatusDoneFg
+                metric.approvalRate >= 0.5f -> CumplrStatusProgressFg
+                else                        -> CumplrStatusOverdueFg
+            },
+        )
     }
 }
