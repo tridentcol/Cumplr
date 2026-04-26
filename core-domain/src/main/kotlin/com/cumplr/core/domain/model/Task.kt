@@ -22,5 +22,6 @@ data class Task(
     val feedback: String?,
     val rejectionReason: String?,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val syncPending: Boolean = false,
 )

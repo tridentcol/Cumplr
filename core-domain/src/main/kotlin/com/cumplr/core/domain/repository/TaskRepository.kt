@@ -40,6 +40,10 @@ interface TaskRepository {
         assignedBy: String,
     ): Result<Task>
 
+    suspend fun deleteTask(taskId: String): Result<Unit>
+    suspend fun markUnderReview(taskId: String): Result<Unit>
+    suspend fun reassignTask(taskId: String, newAssignedTo: String): Result<Unit>
+
     fun startRealtimeForWorker(userId: String)
     fun startRealtimeForChief(companyId: String)
     fun stopRealtime()

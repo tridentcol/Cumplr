@@ -31,20 +31,29 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +61,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import java.time.DayOfWeek
+import java.time.LocalDate
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +96,21 @@ import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.CumplrSurface3
 import com.cumplr.core.ui.theme.Spacing
 import java.time.LocalTime
+
+private enum class DateFilter { ALL, TODAY, WEEK, MONTH }
+
+private fun com.cumplr.core.domain.model.Task.matchesDateFilter(filter: DateFilter): Boolean {
+    if (filter == DateFilter.ALL) return true
+    val d = deadline?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }
+        ?: return false
+    val today = LocalDate.now()
+    return when (filter) {
+        DateFilter.TODAY -> d == today
+        DateFilter.WEEK  -> !d.isBefore(today.with(DayOfWeek.MONDAY)) && !d.isAfter(today.with(DayOfWeek.SUNDAY))
+        DateFilter.MONTH -> d.month == today.month && d.year == today.year
+        DateFilter.ALL   -> true
+    }
+}
 
 private data class ChiefTabDef(val label: String, val filter: (TaskWithWorker) -> Boolean)
 
@@ -119,8 +147,18 @@ fun ChiefHomeScreen(
     val chiefName          by viewModel.chiefName.collectAsStateWithLifecycle()
     val workers            by viewModel.workers.collectAsStateWithLifecycle()
     val pendingReviewCount by viewModel.pendingReviewCount.collectAsStateWithLifecycle()
+    val errorMessage       by viewModel.errorMessage.collectAsStateWithLifecycle()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope             = rememberCoroutineScope()
 
     LaunchedEffect(didLogOut) { if (didLogOut) onLogout() }
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            scope.launch { snackbarHostState.showSnackbar(errorMessage!!) }
+            viewModel.clearError()
+        }
+    }
 
     var selectedNav by remember { mutableStateOf("inicio") }
 
@@ -135,6 +173,7 @@ fun ChiefHomeScreen(
         // CumplrBottomNav handles navigationBars insets internally via windowInsetsBottomHeight,
         // so we clear them here to prevent Scaffold from adding a duplicate bottom offset.
         contentWindowInsets  = androidx.compose.foundation.layout.WindowInsets(0),
+        snackbarHost         = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             Surface(shadowElevation = 4.dp, color = CumplrSurface) {
                 CumplrBottomNav(
@@ -166,12 +205,15 @@ fun ChiefHomeScreen(
                 "equipo" -> ChiefEquipoTab(workers = workers, tasksWithWorkers = tasksWithWorkers)
                 "tareas" -> ChiefTareasTab(
                     tasksWithWorkers = tasksWithWorkers,
+                    workers          = workers,
                     isRefreshing     = isRefreshing,
                     onRefresh        = { viewModel.refresh() },
                     onTaskReview     = onTaskReview,
                     onTaskEdit       = onTaskEdit,
                     onTaskSummary    = onTaskSummary,
                     onAssignTask     = onAssignTask,
+                    onDeleteTask     = { viewModel.deleteTask(it) },
+                    onReassignTask   = { taskId, workerId -> viewModel.reassignTask(taskId, workerId) },
                 )
                 "perfil" -> ChiefPerfilTab(
                     name     = chiefName,
@@ -512,17 +554,26 @@ private fun WorkerRow(worker: User, approvalRate: Float?, taskCount: Int) {
 @Composable
 private fun ChiefTareasTab(
     tasksWithWorkers: List<TaskWithWorker>,
+    workers: List<User>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onTaskReview: (String) -> Unit,
     onTaskEdit: (String) -> Unit,
     onTaskSummary: (String) -> Unit,
     onAssignTask: () -> Unit,
+    onDeleteTask: (String) -> Unit,
+    onReassignTask: (String, String) -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val filtered = remember(tasksWithWorkers, selectedTab) {
-        tasksWithWorkers.filter(CHIEF_TASK_TABS[selectedTab].filter)
+    var dateFilter  by remember { mutableStateOf(DateFilter.ALL) }
+    val filtered = remember(tasksWithWorkers, selectedTab, dateFilter) {
+        tasksWithWorkers
+            .filter(CHIEF_TASK_TABS[selectedTab].filter)
+            .filter { tw -> tw.task.matchesDateFilter(dateFilter) }
     }
+
+    var deleteTargetId  by remember { mutableStateOf<String?>(null) }
+    var reassignTargetId by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScrollableTabRow(
@@ -571,6 +622,21 @@ private fun ChiefTareasTab(
             }
         }
 
+        // Date filter chips
+        Row(
+            modifier              = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            listOf(DateFilter.ALL to "Todos", DateFilter.TODAY to "Hoy",
+                   DateFilter.WEEK to "Semana", DateFilter.MONTH to "Mes").forEach { (f, label) ->
+                FilterChip(
+                    selected = dateFilter == f,
+                    onClick  = { dateFilter = f },
+                    label    = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+
         Box(modifier = Modifier.weight(1f)) {
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -600,17 +666,44 @@ private fun ChiefTareasTab(
                             val workerLabel = tw.worker?.let { w ->
                                 if (w.position != null) "${w.position} · ${w.name}" else w.name
                             }
-                            TaskCard(
-                                task         = tw.task,
-                                assignerName = workerLabel,
-                                onClick      = {
-                                    when (tw.task.status) {
-                                        TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
-                                        TaskStatus.APPROVED, TaskStatus.REJECTED       -> onTaskSummary(tw.task.id)
-                                        else                                            -> onTaskEdit(tw.task.id)
+                            var menuExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                TaskCard(
+                                    task         = tw.task,
+                                    assignerName = workerLabel,
+                                    onClick      = {
+                                        when (tw.task.status) {
+                                            TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
+                                            TaskStatus.APPROVED, TaskStatus.REJECTED       -> onTaskSummary(tw.task.id)
+                                            else                                            -> onTaskEdit(tw.task.id)
+                                        }
+                                    },
+                                    onMenuClick  = { menuExpanded = true },
+                                )
+                                DropdownMenu(
+                                    expanded         = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text        = { Text("Eliminar") },
+                                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                        onClick     = {
+                                            menuExpanded = false
+                                            deleteTargetId = tw.task.id
+                                        },
+                                    )
+                                    if (tw.task.status == TaskStatus.ASSIGNED) {
+                                        DropdownMenuItem(
+                                            text        = { Text("Reasignar") },
+                                            leadingIcon = { Icon(Icons.Outlined.PersonAdd, null) },
+                                            onClick     = {
+                                                menuExpanded = false
+                                                reassignTargetId = tw.task.id
+                                            },
+                                        )
                                     }
-                                },
-                            )
+                                }
+                            }
                         }
                     }
                 }
@@ -627,6 +720,57 @@ private fun ChiefTareasTab(
                 text           = { Text("Asignar", style = MaterialTheme.typography.labelLarge) },
             )
         }
+    }
+
+    // Delete confirmation dialog
+    if (deleteTargetId != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTargetId = null },
+            title            = { Text("Eliminar tarea") },
+            text             = { Text("Esta acción no se puede deshacer. La tarea se eliminará también para el trabajador.") },
+            confirmButton    = {
+                TextButton(
+                    onClick = {
+                        onDeleteTask(deleteTargetId!!)
+                        deleteTargetId = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Eliminar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTargetId = null }) { Text("Cancelar") }
+            },
+        )
+    }
+
+    // Reassign worker picker dialog
+    if (reassignTargetId != null) {
+        AlertDialog(
+            onDismissRequest = { reassignTargetId = null },
+            title            = { Text("Reasignar tarea") },
+            text             = {
+                Column {
+                    workers.forEach { w ->
+                        TextButton(
+                            onClick = {
+                                onReassignTask(reassignTargetId!!, w.id)
+                                reassignTargetId = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text     = if (w.position != null) "${w.name} · ${w.position}" else w.name,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton   = {},
+            dismissButton   = {
+                TextButton(onClick = { reassignTargetId = null }) { Text("Cancelar") }
+            },
+        )
     }
 }
 

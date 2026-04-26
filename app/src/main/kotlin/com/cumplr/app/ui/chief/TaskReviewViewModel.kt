@@ -3,6 +3,7 @@ package com.cumplr.app.ui.chief
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.model.User
 import com.cumplr.core.domain.repository.TaskRepository
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -43,6 +45,15 @@ class TaskReviewViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<ReviewUiState>(ReviewUiState.Idle)
     val uiState: StateFlow<ReviewUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val t = task.first { it != null }
+            if (t != null && t.status == TaskStatus.SUBMITTED) {
+                taskRepository.markUnderReview(taskId)
+            }
+        }
+    }
 
     fun approve(feedback: String) {
         viewModelScope.launch {

@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
 import com.cumplr.core.domain.model.User
+import com.cumplr.core.data.session.AuthEvent
+import com.cumplr.core.data.session.AuthEventBus
 import com.cumplr.core.domain.repository.AuthRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
@@ -34,6 +36,7 @@ class ChiefHomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val taskRepository: TaskRepository,
     private val userRepository: UserRepository,
+    private val authEventBus: AuthEventBus,
 ) : ViewModel() {
 
     private val session = authRepository.getCurrentSession()
@@ -82,7 +85,15 @@ class ChiefHomeViewModel @Inject constructor(
 
     private var pollingJob: Job? = null
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            authEventBus.events.collect { event ->
+                if (event is AuthEvent.SessionExpired) _didLogOut.value = true
+            }
+        }
         viewModelScope.launch {
             val s = authRepository.getCurrentSession().first { it != null } ?: return@launch
             taskRepository.refreshCompanyTasks(s.companyId)
@@ -118,6 +129,24 @@ class ChiefHomeViewModel @Inject constructor(
             _isRefreshing.value = false
         }
     }
+
+    fun deleteTask(taskId: String) {
+        viewModelScope.launch {
+            taskRepository.deleteTask(taskId).onFailure {
+                _errorMessage.value = "No se pudo eliminar la tarea"
+            }
+        }
+    }
+
+    fun reassignTask(taskId: String, newAssignedTo: String) {
+        viewModelScope.launch {
+            taskRepository.reassignTask(taskId, newAssignedTo).onFailure {
+                _errorMessage.value = "No se pudo reasignar la tarea"
+            }
+        }
+    }
+
+    fun clearError() { _errorMessage.value = null }
 
     fun signOut() {
         viewModelScope.launch {

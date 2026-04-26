@@ -26,9 +26,10 @@ fun TaskEntity.toDomain() = Task(
     rejectionReason = rejectionReason,
     createdAt       = createdAt,
     updatedAt       = updatedAt,
+    syncPending     = syncPending,
 )
 
-fun Task.toEntity(syncPending: Boolean = false) = TaskEntity(
+fun Task.toEntity(syncPending: Boolean = false, pendingSyncOp: String? = null) = TaskEntity(
     id              = id,
     companyId       = companyId,
     title           = title,
@@ -49,6 +50,7 @@ fun Task.toEntity(syncPending: Boolean = false) = TaskEntity(
     createdAt       = createdAt,
     updatedAt       = updatedAt,
     syncPending     = syncPending,
+    pendingSyncOp   = pendingSyncOp,
 )
 
 fun TaskDto.toEntity() = TaskEntity(

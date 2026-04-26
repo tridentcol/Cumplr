@@ -68,6 +68,10 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
+    // WorkManager + Hilt integration
+    implementation(libs.workmanager.ktx)
+    implementation(libs.hilt.work)
+
     // Supabase (declared in app per project requirements)
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)

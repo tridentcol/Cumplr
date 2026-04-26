@@ -167,4 +167,37 @@ interface TaskDao {
         WHERE id = :taskId
     """)
     suspend fun updateRejection(taskId: String, status: String, rejectionReason: String, updatedAt: String, syncPending: Int)
+
+    // ── Nuevos métodos v2 ─────────────────────────────────────────────────────
+
+    @Query("DELETE FROM tasks WHERE id = :taskId")
+    suspend fun deleteTask(taskId: String)
+
+    @Query("""
+        UPDATE tasks
+        SET status = 'UNDER_REVIEW',
+            updated_at = :updatedAt,
+            sync_pending = 1,
+            pending_sync_op = 'PATCH'
+        WHERE id = :taskId
+    """)
+    suspend fun markUnderReview(taskId: String, updatedAt: String)
+
+    @Query("DELETE FROM tasks WHERE status IN ('APPROVED', 'REJECTED') AND updated_at < :cutoff")
+    suspend fun deleteCompletedBefore(cutoff: String)
+
+    @Query("UPDATE tasks SET sync_pending = 1, pending_sync_op = :op WHERE id = :taskId")
+    suspend fun markPending(taskId: String, op: String)
+
+    @Query("UPDATE tasks SET assigned_to = :assignedTo, updated_at = :updatedAt WHERE id = :taskId")
+    suspend fun updateAssignedTo(taskId: String, assignedTo: String, updatedAt: String)
+
+    @Query("UPDATE tasks SET sync_pending = 0, pending_sync_op = NULL WHERE id = :taskId")
+    suspend fun clearSync(taskId: String)
+
+    @Query("SELECT * FROM tasks WHERE pending_sync_op = :op")
+    suspend fun getPendingSyncByOp(op: String): List<TaskEntity>
+
+    @Query("SELECT * FROM tasks WHERE company_id = :companyId")
+    suspend fun getTasksByCompanySnapshot(companyId: String): List<TaskEntity>
 }

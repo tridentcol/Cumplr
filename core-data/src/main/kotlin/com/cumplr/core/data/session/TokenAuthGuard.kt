@@ -27,6 +27,7 @@ private const val TAG = "TokenAuth"
 class TokenAuthGuard @Inject constructor(
     private val sessionManager: SessionManager,
     private val restClient: SupabaseRestClient,
+    private val authEventBus: AuthEventBus,
 ) {
 
     private val refreshMutex = Mutex()
@@ -58,10 +59,17 @@ class TokenAuthGuard @Inject constructor(
         val current = sessionManager.getSession().first()
             ?: throw IllegalStateException("Sin sesión activa")
         if (current.accessToken != staleToken) return@withLock current.accessToken
-        val (newAccess, newRefresh) = restClient.refreshToken(current.refreshToken)
-        sessionManager.updateTokens(newAccess, newRefresh)
-        Log.d(TAG, "Token refreshed after 401")
-        newAccess
+        return try {
+            val (newAccess, newRefresh) = restClient.refreshToken(current.refreshToken)
+            sessionManager.updateTokens(newAccess, newRefresh)
+            Log.d(TAG, "Token refreshed after 401")
+            newAccess
+        } catch (e: Exception) {
+            Log.e(TAG, "Refresh token rechazado — forzando re-login: ${e.message}")
+            sessionManager.clearSession()
+            authEventBus.postSessionExpired()
+            throw e
+        }
     }
 
     /**

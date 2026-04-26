@@ -18,9 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,6 +60,7 @@ fun TaskCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     assignerName: String? = null,
+    onMenuClick: (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -101,6 +105,28 @@ fun TaskCard(
                 )
                 Spacer(Modifier.width(Spacing.sm))
                 CumplrChip(status = task.status)
+                if (task.syncPending) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector        = Icons.Outlined.CloudOff,
+                        contentDescription = "Pendiente de sincronización",
+                        tint               = Color(0xFFFFA000),
+                        modifier           = Modifier.size(14.dp),
+                    )
+                }
+                if (onMenuClick != null) {
+                    IconButton(
+                        onClick  = onMenuClick,
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Outlined.MoreVert,
+                            contentDescription = "Más opciones",
+                            tint               = CumplrFgMuted,
+                            modifier           = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(Spacing.sm))
