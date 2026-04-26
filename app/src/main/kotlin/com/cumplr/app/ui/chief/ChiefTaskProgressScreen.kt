@@ -1,4 +1,4 @@
-package com.cumplr.app.ui.worker
+package com.cumplr.app.ui.chief
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,8 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cumplr.core.domain.enums.TaskPriority
 import com.cumplr.core.domain.enums.TaskStatus
 import com.cumplr.core.domain.model.Task
-import com.cumplr.core.ui.component.CumplrButton
-import com.cumplr.core.ui.component.CumplrButtonVariant
+import com.cumplr.core.domain.model.User
 import com.cumplr.core.ui.component.CumplrChip
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrBackground
@@ -52,10 +52,10 @@ import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
 import com.cumplr.core.ui.theme.CumplrFgSubtle
 import com.cumplr.core.ui.theme.CumplrStatusDoneFg
-import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
 import com.cumplr.core.ui.theme.CumplrSurface
+import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.Spacing
 import java.time.Duration
 import java.time.Instant
@@ -65,13 +65,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun TaskDetailScreen(
+fun ChiefTaskProgressScreen(
     onBack: () -> Unit,
-    onNavigateToExecution: (String) -> Unit,
-    viewModel: TaskDetailViewModel = hiltViewModel(),
+    onEdit: () -> Unit,
+    viewModel: ChiefTaskProgressViewModel = hiltViewModel(),
 ) {
-    val task         by viewModel.task.collectAsStateWithLifecycle()
-    val assignerName by viewModel.assignerName.collectAsStateWithLifecycle()
+    val task   by viewModel.task.collectAsStateWithLifecycle()
+    val worker by viewModel.worker.collectAsStateWithLifecycle()
 
     Surface(modifier = Modifier.fillMaxSize(), color = CumplrBackground) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
@@ -82,6 +82,10 @@ fun TaskDetailScreen(
                 IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver", tint = CumplrFgMuted)
                 }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Outlined.Edit, "Editar tarea", tint = CumplrAccent)
+                }
             }
 
             val t = task
@@ -90,22 +94,14 @@ fun TaskDetailScreen(
                     CircularProgressIndicator(color = CumplrAccent)
                 }
             } else {
-                TaskDetailContent(
-                    task         = t,
-                    assignerName = assignerName,
-                    onStartTask  = { onNavigateToExecution(t.id) },
-                )
+                ProgressContent(task = t, worker = worker)
             }
         }
     }
 }
 
 @Composable
-private fun TaskDetailContent(
-    task: Task,
-    assignerName: String?,
-    onStartTask: () -> Unit,
-) {
+private fun ProgressContent(task: Task, worker: User?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -129,31 +125,60 @@ private fun TaskDetailContent(
             CumplrChip(status = task.status)
         }
 
-        // ── Assigner row ──────────────────────────────────────────────────────
-        Row(
-            verticalAlignment     = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        ) {
-            Box(
+        // ── Worker card ───────────────────────────────────────────────────────
+        if (worker != null) {
+            Row(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(CumplrAccent.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CumplrSurface)
+                    .padding(Spacing.md),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
-                Icon(Icons.Outlined.Person, null, tint = CumplrAccent, modifier = Modifier.size(16.dp))
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(CumplrAccent.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text  = worker.name.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = CumplrAccent,
+                    )
+                }
+                Column {
+                    Text(
+                        text  = worker.name,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = CumplrFg,
+                    )
+                    if (!worker.position.isNullOrBlank()) {
+                        Text(
+                            text  = worker.position.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CumplrFgMuted,
+                        )
+                    }
+                }
             }
-            Column {
-                Text(
-                    text  = if (assignerName != null) "Asignada por $assignerName" else "Asignada por jefe",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = CumplrFg,
-                )
-                Text(
-                    text  = timeAgo(task.createdAt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = CumplrFgMuted,
-                )
+        } else {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(CumplrSurface2),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Person, null, tint = CumplrFgMuted, modifier = Modifier.size(16.dp))
+                }
+                Text("Sin trabajador asignado", style = MaterialTheme.typography.bodySmall, color = CumplrFgMuted)
             }
         }
 
@@ -168,7 +193,6 @@ private fun TaskDetailContent(
                 .padding(Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            // Priority
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -186,7 +210,6 @@ private fun TaskDetailContent(
                 )
             }
 
-            // Deadline
             if (!task.deadline.isNullOrBlank()) {
                 val dlColor = deadlineColor(task.deadline!!)
                 Row(
@@ -202,7 +225,6 @@ private fun TaskDetailContent(
                 }
             }
 
-            // Location
             if (!task.location.isNullOrBlank()) {
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
@@ -213,6 +235,20 @@ private fun TaskDetailContent(
                         text  = task.location.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         color = CumplrFgMuted,
+                    )
+                }
+            }
+
+            if (task.status == TaskStatus.IN_PROGRESS && !task.startTime.isNullOrBlank()) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    Icon(Icons.Outlined.Timer, null, tint = CumplrStatusProgressFg, modifier = Modifier.size(15.dp))
+                    Text(
+                        text  = "En ejecución hace ${elapsedSince(task.startTime!!)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CumplrStatusProgressFg,
                     )
                 }
             }
@@ -229,80 +265,9 @@ private fun TaskDetailContent(
                 verticalArrangement = Arrangement.spacedBy(Spacing.xs),
             ) {
                 Text("Descripción", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+                Spacer(Modifier.height(2.dp))
                 Text(task.description.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
             }
-        }
-
-        // ── Observations ──────────────────────────────────────────────────────
-        if (!task.observations.isNullOrBlank()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CumplrSurface)
-                    .padding(Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-            ) {
-                Text("Observaciones", style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
-                Text(task.observations.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
-            }
-        }
-
-        // ── Feedback ──────────────────────────────────────────────────────────
-        if (!task.feedback.isNullOrBlank()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CumplrStatusDoneFg.copy(alpha = 0.10f))
-                    .padding(Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-            ) {
-                Text("Feedback", style = MaterialTheme.typography.labelSmall, color = CumplrStatusDoneFg)
-                Text(task.feedback.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
-            }
-        }
-
-        // ── Rejection reason ──────────────────────────────────────────────────
-        if (!task.rejectionReason.isNullOrBlank()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CumplrStatusOverdueBg)
-                    .padding(Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment     = Alignment.Top,
-            ) {
-                Icon(Icons.Outlined.Warning, null, tint = CumplrStatusOverdueFg, modifier = Modifier.size(16.dp).padding(top = 2.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                    Text("Motivo del rechazo", style = MaterialTheme.typography.labelSmall, color = CumplrStatusOverdueFg)
-                    Text(task.rejectionReason.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(Spacing.sm))
-
-        // ── Action button ─────────────────────────────────────────────────────
-        when (task.status) {
-            TaskStatus.ASSIGNED -> CumplrButton(
-                text     = "Iniciar tarea",
-                onClick  = onStartTask,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TaskStatus.IN_PROGRESS -> CumplrButton(
-                text     = "Continuar tarea",
-                onClick  = onStartTask,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TaskStatus.REJECTED -> CumplrButton(
-                text     = "Corregir y reenviar",
-                onClick  = onStartTask,
-                variant  = CumplrButtonVariant.Secondary,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            else -> Unit
         }
 
         Spacer(Modifier.height(Spacing.lg))
@@ -311,15 +276,14 @@ private fun TaskDetailContent(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-private fun timeAgo(iso: String): String = try {
-    val hours = Duration.between(Instant.parse(iso), Instant.now()).toHours()
+private fun deadlineColor(iso: String): Color = try {
+    val hours = Duration.between(Instant.now(), Instant.parse(iso)).toHours()
     when {
-        hours < 1  -> "Hace unos minutos"
-        hours < 24 -> "Hace ${hours}h"
-        hours < 48 -> "Hace 1 día"
-        else       -> "Hace ${hours / 24} días"
+        hours < 0  -> CumplrStatusOverdueFg
+        hours < 24 -> CumplrStatusProgressFg
+        else       -> CumplrStatusDoneFg
     }
-} catch (_: Exception) { "" }
+} catch (_: Exception) { CumplrFgMuted }
 
 private fun formatDeadlineFull(iso: String): String = try {
     val zdt   = Instant.parse(iso).atZone(ZoneId.systemDefault())
@@ -334,14 +298,14 @@ private fun formatDeadlineFull(iso: String): String = try {
     }
 } catch (_: Exception) { iso.take(10) }
 
-private fun deadlineColor(iso: String): Color = try {
-    val hours = Duration.between(Instant.now(), Instant.parse(iso)).toHours()
+private fun elapsedSince(iso: String): String = try {
+    val mins = Duration.between(Instant.parse(iso), Instant.now()).toMinutes()
     when {
-        hours < 0  -> CumplrStatusOverdueFg
-        hours < 24 -> CumplrStatusProgressFg
-        else       -> CumplrStatusDoneFg
+        mins < 60  -> "${mins}min"
+        mins < 1440 -> "${mins / 60}h ${mins % 60}min"
+        else       -> "${mins / 1440}d ${(mins % 1440) / 60}h"
     }
-} catch (_: Exception) { CumplrFgMuted }
+} catch (_: Exception) { "—" }
 
 private fun TaskPriority.dotColor(): Color = when (this) {
     TaskPriority.HIGH   -> CumplrStatusOverdueFg

@@ -1,9 +1,10 @@
-package com.cumplr.app.ui.worker
+package com.cumplr.app.ui.chief
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cumplr.core.domain.model.Task
+import com.cumplr.core.domain.model.User
 import com.cumplr.core.domain.repository.TaskRepository
 import com.cumplr.core.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,26 +12,22 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 @HiltViewModel
-class TaskDetailViewModel @Inject constructor(
+class ChiefTaskProgressViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     taskRepository: TaskRepository,
     userRepository: UserRepository,
 ) : ViewModel() {
 
-    private val taskId: String = checkNotNull(savedStateHandle["taskId"])
+    val taskId: String = checkNotNull(savedStateHandle["taskId"])
 
     val task: StateFlow<Task?> = taskRepository.getTask(taskId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val assignerName: StateFlow<String?> = task
-        .flatMapLatest { t ->
-            if (t != null) userRepository.getUser(t.assignedBy).map { it?.name }
-            else flowOf(null)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val worker: StateFlow<User?> = task.flatMapLatest { t ->
+        if (t != null) userRepository.getUser(t.assignedTo) else flowOf(null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }

@@ -7,7 +7,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.cumplr.core.data.session.SessionManager
 import com.cumplr.core.domain.enums.UserRole
-import com.cumplr.core.domain.repository.NoteRepository
 import com.cumplr.core.domain.repository.TaskRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -18,7 +17,6 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val taskRepository: TaskRepository,
-    private val noteRepository: NoteRepository,
     private val sessionManager: SessionManager,
 ) : CoroutineWorker(context, params) {
 
@@ -29,7 +27,6 @@ class SyncWorker @AssistedInject constructor(
                 UserRole.CHIEF, UserRole.ADMIN -> taskRepository.refreshCompanyTasks(session.companyId)
                 UserRole.WORKER -> taskRepository.refresh(session.userId)
             }
-            noteRepository.syncPending()
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "Background sync failed: ${e.message}")

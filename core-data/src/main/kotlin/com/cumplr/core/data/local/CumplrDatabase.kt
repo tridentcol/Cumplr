@@ -4,12 +4,10 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.cumplr.core.data.local.dao.NoteDao
 import com.cumplr.core.data.local.dao.NotificationDao
 import com.cumplr.core.data.local.dao.TaskDao
 import com.cumplr.core.data.local.dao.UserDao
 import com.cumplr.core.data.local.entity.CompanyEntity
-import com.cumplr.core.data.local.entity.NoteEntity
 import com.cumplr.core.data.local.entity.NotificationEntity
 import com.cumplr.core.data.local.entity.TaskEntity
 import com.cumplr.core.data.local.entity.TaskEventEntity
@@ -47,6 +45,12 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS task_notes")
+    }
+}
+
 @Database(
     entities = [
         CompanyEntity::class,
@@ -54,14 +58,12 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         TaskEntity::class,
         TaskEventEntity::class,
         NotificationEntity::class,
-        NoteEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class CumplrDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun taskDao(): TaskDao
     abstract fun notificationDao(): NotificationDao
-    abstract fun noteDao(): NoteDao
 }
