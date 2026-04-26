@@ -41,8 +41,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -593,7 +591,7 @@ private fun WorkerRow(worker: User, approvalRate: Float?, taskCount: Int) {
 
 // ── Tareas tab ────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChiefTareasTab(
     tasksWithWorkers: List<TaskWithWorker>,
@@ -749,9 +747,11 @@ private fun ChiefTareasTab(
                             }
                             val isSelected = tw.task.id in selectedTaskIds
                             var menuExpanded by remember { mutableStateOf(false) }
-                            Box(
-                                modifier = Modifier.combinedClickable(
-                                    onClick = {
+                            Box {
+                                TaskCard(
+                                    task         = tw.task,
+                                    assignerName = workerLabel,
+                                    onClick      = {
                                         if (isSelectionMode) onToggleSelection(tw.task.id)
                                         else when (tw.task.status) {
                                             TaskStatus.SUBMITTED, TaskStatus.UNDER_REVIEW -> onTaskReview(tw.task.id)
@@ -759,13 +759,7 @@ private fun ChiefTareasTab(
                                             else                                            -> onTaskEdit(tw.task.id)
                                         }
                                     },
-                                    onLongClick = { onToggleSelection(tw.task.id) },
-                                ),
-                            ) {
-                                TaskCard(
-                                    task         = tw.task,
-                                    assignerName = workerLabel,
-                                    onClick      = {},
+                                    onLongClick  = { onToggleSelection(tw.task.id) },
                                     modifier     = if (isSelected) Modifier.border(2.dp, CumplrAccent, RoundedCornerShape(12.dp)) else Modifier,
                                     onMenuClick  = if (isSelectionMode) null else ({ menuExpanded = true }),
                                 )
