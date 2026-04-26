@@ -31,11 +31,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -74,14 +80,20 @@ import com.cumplr.core.ui.component.CumplrNavItem
 import com.cumplr.core.ui.component.EmptyState
 import com.cumplr.core.ui.component.OfflineBanner
 import com.cumplr.core.ui.component.TaskCard
+import androidx.compose.ui.text.font.FontWeight
 import com.cumplr.core.ui.theme.CumplrAccent
 import com.cumplr.core.ui.theme.CumplrAccentInk
 import com.cumplr.core.ui.theme.CumplrBackground
 import com.cumplr.core.ui.theme.CumplrFg
 import com.cumplr.core.ui.theme.CumplrFgMuted
+import com.cumplr.core.ui.theme.CumplrFgSubtle
+import com.cumplr.core.ui.theme.CumplrStatusDoneBg
 import com.cumplr.core.ui.theme.CumplrStatusDoneFg
+import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
+import com.cumplr.core.ui.theme.CumplrStatusSubmittedBg
+import com.cumplr.core.ui.theme.CumplrStatusSubmittedFg
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.CumplrSurface3
@@ -406,10 +418,16 @@ private fun WorkerTareasTab(
 ) {
     var selectedTab  by remember { mutableIntStateOf(0) }
     var dateFilter   by remember { mutableStateOf(WorkerDateFilter.ALL) }
-    val filteredTasks = remember(tasks, selectedTab, dateFilter) {
+    var searchQuery  by remember { mutableStateOf("") }
+    val filteredTasks = remember(tasks, selectedTab, dateFilter, searchQuery) {
         tasks
             .filter(TASK_TABS[selectedTab].filter)
             .filter { it.matchesWorkerDateFilter(dateFilter) }
+            .filter { t ->
+                searchQuery.isBlank() ||
+                t.title.contains(searchQuery, ignoreCase = true) ||
+                t.location?.contains(searchQuery, ignoreCase = true) == true
+            }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -449,6 +467,30 @@ private fun WorkerTareasTab(
                 )
             }
         }
+
+        // Search bar
+        TextField(
+            value         = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder   = { Text("Buscar tareas…", style = MaterialTheme.typography.bodySmall, color = CumplrFgSubtle) },
+            leadingIcon   = { Icon(Icons.Outlined.Search, null, tint = CumplrFgMuted, modifier = Modifier.size(18.dp)) },
+            trailingIcon  = if (searchQuery.isNotEmpty()) {{ IconButton(onClick = { searchQuery = "" }) {
+                Icon(Icons.Outlined.Close, null, tint = CumplrFgMuted, modifier = Modifier.size(16.dp))
+            }}} else null,
+            singleLine    = true,
+            textStyle     = MaterialTheme.typography.bodySmall.copy(color = CumplrFg),
+            colors        = TextFieldDefaults.colors(
+                focusedContainerColor   = CumplrSurface2,
+                unfocusedContainerColor = CumplrSurface,
+                focusedIndicatorColor   = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor             = CumplrAccent,
+            ),
+            shape    = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+        )
 
         // Date filter chips
         Row(
@@ -553,28 +595,79 @@ private fun WorkerNotificationsTab(
 
 @Composable
 private fun NotificationRow(notif: AppNotification, onClick: () -> Unit) {
+    val (accentColor, iconBg, icon) = when (notif.type) {
+        "TASK_APPROVED" -> Triple(CumplrStatusDoneFg,      CumplrStatusDoneBg,      Icons.Outlined.CheckCircle)
+        "TASK_REJECTED" -> Triple(CumplrStatusOverdueFg,   CumplrStatusOverdueBg,   Icons.Outlined.Close)
+        else            -> Triple(CumplrStatusSubmittedFg, CumplrStatusSubmittedBg, Icons.Outlined.Notifications)
+    }
+    val cardBg = if (notif.read) CumplrSurface else CumplrSurface2
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(CumplrSurface)
+            .clip(RoundedCornerShape(14.dp))
+            .background(cardBg)
             .clickable(onClick = onClick)
-            .padding(Spacing.md),
-        verticalAlignment     = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            .height(IntrinsicSize.Min),
     ) {
+        // Accent left stripe
         Box(
             modifier = Modifier
-                .padding(top = 4.dp)
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(if (notif.read) CumplrSurface2 else CumplrAccent),
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(if (notif.read) CumplrSurface3 else accentColor),
         )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(notif.title, style = MaterialTheme.typography.bodyMedium, color = CumplrFg)
-            Text(notif.body,  style = MaterialTheme.typography.bodySmall,  color = CumplrFgMuted)
-            Spacer(Modifier.height(2.dp))
-            Text(formatNotifTime(notif.createdAt), style = MaterialTheme.typography.labelSmall, color = CumplrFgMuted)
+        Row(
+            modifier              = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm + 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment     = Alignment.CenterVertically,
+        ) {
+            // Icon container
+            Box(
+                modifier         = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (notif.read) CumplrSurface3 else iconBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector        = icon,
+                    contentDescription = null,
+                    tint               = if (notif.read) CumplrFgMuted else accentColor,
+                    modifier           = Modifier.size(20.dp),
+                )
+            }
+            Column(
+                modifier              = Modifier.weight(1f),
+                verticalArrangement   = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text  = notif.title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (notif.read) FontWeight.Normal else FontWeight.SemiBold,
+                    ),
+                    color = if (notif.read) CumplrFgMuted else CumplrFg,
+                )
+                Text(
+                    text     = notif.body,
+                    style    = MaterialTheme.typography.bodySmall,
+                    color    = CumplrFgMuted,
+                    maxLines = 2,
+                )
+                Text(
+                    text  = formatNotifTime(notif.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CumplrFgSubtle,
+                )
+            }
+            if (!notif.read) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(accentColor),
+                )
+            }
         }
     }
 }

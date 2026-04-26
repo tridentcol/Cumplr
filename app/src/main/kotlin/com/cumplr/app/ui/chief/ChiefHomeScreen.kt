@@ -31,8 +31,10 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +44,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -54,6 +57,8 @@ import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -91,10 +96,12 @@ import com.cumplr.core.ui.theme.CumplrStatusDoneFg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueBg
 import com.cumplr.core.ui.theme.CumplrStatusOverdueFg
 import com.cumplr.core.ui.theme.CumplrStatusProgressFg
+import com.cumplr.core.ui.theme.CumplrFgSubtle
 import com.cumplr.core.ui.theme.CumplrSurface
 import com.cumplr.core.ui.theme.CumplrSurface2
 import com.cumplr.core.ui.theme.CumplrSurface3
 import com.cumplr.core.ui.theme.Spacing
+import androidx.compose.ui.graphics.Color
 import java.time.LocalTime
 
 private enum class DateFilter { ALL, TODAY, WEEK, MONTH }
@@ -566,10 +573,17 @@ private fun ChiefTareasTab(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var dateFilter  by remember { mutableStateOf(DateFilter.ALL) }
-    val filtered = remember(tasksWithWorkers, selectedTab, dateFilter) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filtered = remember(tasksWithWorkers, selectedTab, dateFilter, searchQuery) {
         tasksWithWorkers
             .filter(CHIEF_TASK_TABS[selectedTab].filter)
             .filter { tw -> tw.task.matchesDateFilter(dateFilter) }
+            .filter { tw ->
+                searchQuery.isBlank() ||
+                tw.task.title.contains(searchQuery, ignoreCase = true) ||
+                tw.task.location?.contains(searchQuery, ignoreCase = true) == true ||
+                tw.workerName?.contains(searchQuery, ignoreCase = true) == true
+            }
     }
 
     var deleteTargetId  by remember { mutableStateOf<String?>(null) }
@@ -621,6 +635,30 @@ private fun ChiefTareasTab(
                 )
             }
         }
+
+        // Search bar
+        TextField(
+            value         = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder   = { Text("Buscar por tarea, lugar o worker…", style = MaterialTheme.typography.bodySmall, color = CumplrFgSubtle) },
+            leadingIcon   = { Icon(Icons.Outlined.Search, null, tint = CumplrFgMuted, modifier = Modifier.size(18.dp)) },
+            trailingIcon  = if (searchQuery.isNotEmpty()) {{ IconButton(onClick = { searchQuery = "" }) {
+                Icon(Icons.Outlined.Close, null, tint = CumplrFgMuted, modifier = Modifier.size(16.dp))
+            }}} else null,
+            singleLine    = true,
+            textStyle     = MaterialTheme.typography.bodySmall.copy(color = CumplrFg),
+            colors        = TextFieldDefaults.colors(
+                focusedContainerColor   = CumplrSurface2,
+                unfocusedContainerColor = CumplrSurface,
+                focusedIndicatorColor   = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor             = CumplrAccent,
+            ),
+            shape    = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+        )
 
         // Date filter chips
         Row(

@@ -139,6 +139,15 @@ class TaskRepositoryImpl @Inject constructor(
             taskDao.upsertTasks(dtos.map { it.toEntity() })
             Log.d(TAG, "refresh OK — ${dtos.size} tasks")
 
+            // Delete local tasks that no longer exist on server (deleted or reassigned by chief).
+            // Never delete rows with pendingSyncOp == "CREATE" — those haven't reached the server yet.
+            val remoteIds = dtos.map { it.id }.toSet()
+            val orphanIds = existing.keys.filter { it !in remoteIds && existing[it]?.pendingSyncOp != "CREATE" }
+            if (orphanIds.isNotEmpty()) {
+                orphanIds.forEach { taskDao.deleteTask(it) }
+                Log.d(TAG, "refresh — deleted ${orphanIds.size} orphaned tasks")
+            }
+
             // Generate local notifications for status transitions detected from the server.
             val now = Instant.now().toString()
             val newNotifs = dtos.mapNotNull { dto ->
